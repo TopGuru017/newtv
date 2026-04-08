@@ -43,6 +43,11 @@ files:
   - js/iptv/xlive.js
   - js/iptv/xvod.js
   - js/player/iptvPlayer.js
+  - js/debug/logger.js
+  - js/store/favorites.js
+  - js/store/lastWatch.js
+  - js/store/searchHistory.js
+  - js/store/settings.js
 
 # list of files to exclude based on the matched patterns
 excludes:

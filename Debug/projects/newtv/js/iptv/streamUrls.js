@@ -3,6 +3,9 @@
  */
 import * as cred from "./credentials.js";
 import { formatTimeshiftStartIsrael, rawDurationMinutes } from "./timeUtils.js";
+import { createLogger } from "../debug/logger.js";
+
+const log = createLogger("iptv/streamUrls");
 
 function encPath(s) {
   return encodeURIComponent(s || "").replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
@@ -20,7 +23,9 @@ export function liveStreamUrl(streamId) {
   const u = encPath(cred.usernameRaw());
   const p = encPath(cred.passwordRaw());
   const id = String(streamId || "").trim().replace(/^\/+/, "");
-  return `${base}/live/${u}/${p}/${id}.m3u8`;
+  const out = `${base}/live/${u}/${p}/${id}.m3u8`;
+  log.debug("liveStreamUrl()", { streamId, out });
+  return out;
 }
 
 export function vodMovieUrl(streamId, containerExtension) {
@@ -29,7 +34,9 @@ export function vodMovieUrl(streamId, containerExtension) {
   const p = encPath(cred.passwordRaw());
   const id = String(streamId || "").trim().replace(/^\/+/, "");
   const ext = String(containerExtension || "mp4").replace(/^\./, "") || "mp4";
-  return `${base}/movie/${u}/${p}/${id}.${ext}`;
+  const out = `${base}/movie/${u}/${p}/${id}.${ext}`;
+  log.debug("vodMovieUrl()", { streamId, containerExtension, out });
+  return out;
 }
 
 export function seriesEpisodeUrl(episodeStreamId, containerExtension) {
@@ -38,7 +45,9 @@ export function seriesEpisodeUrl(episodeStreamId, containerExtension) {
   const p = encPath(cred.passwordRaw());
   const id = String(episodeStreamId || "").trim().replace(/^\/+/, "");
   const ext = String(containerExtension || "mp4").replace(/^\./, "") || "mp4";
-  return `${base}/series/${u}/${p}/${id}.${ext}`;
+  const out = `${base}/series/${u}/${p}/${id}.${ext}`;
+  log.debug("seriesEpisodeUrl()", { episodeStreamId, containerExtension, out });
+  return out;
 }
 
 function rawToUrlSegment(raw) {
@@ -61,11 +70,15 @@ export function timeshiftStreamUrl(streamId, startUnix, endUnix, startRaw, endRa
   const durationMinutes =
     startFmt && endRaw ? rawDurationMinutes(startRaw, endRaw) : null;
   if (startFmt != null && durationMinutes != null) {
-    return `${base}/timeshift/${u}/${p}/${durationMinutes}/${startFmt}/${id}.m3u8`;
+    const out = `${base}/timeshift/${u}/${p}/${durationMinutes}/${startFmt}/${id}.m3u8`;
+    log.debug("timeshiftStreamUrl() raw", { streamId, startRaw, endRaw, out });
+    return out;
   }
   const durationMinutesFallback = 8 * 60;
   const startFmtFallback = formatTimeshiftStartIsrael(startUnix);
-  return `${base}/timeshift/${u}/${p}/${durationMinutesFallback}/${startFmtFallback}/${id}.m3u8`;
+  const out = `${base}/timeshift/${u}/${p}/${durationMinutesFallback}/${startFmtFallback}/${id}.m3u8`;
+  log.debug("timeshiftStreamUrl() fallback", { streamId, startUnix, endUnix, out });
+  return out;
 }
 
 export function isPanelLiveStreamUrl(url) {

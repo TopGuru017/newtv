@@ -3,6 +3,9 @@
  */
 import { parseJsonArrayOrData } from "./parse.js";
 import { xtreamGet } from "./xapi.js";
+import { createLogger } from "../debug/logger.js";
+
+const log = createLogger("iptv/xvod");
 
 function readAddedUnixSeconds(o, preferKeys) {
   for (const k of preferKeys) {
@@ -32,6 +35,7 @@ function readTmdbRating(o) {
 }
 
 export async function fetchVodCategories() {
+  log.debug("fetchVodCategories()");
   const json = await xtreamGet("get_vod_categories");
   const arr = parseJsonArrayOrData(json);
   const out = [];
@@ -42,10 +46,12 @@ export async function fetchVodCategories() {
     const name = String(o.category_name || "").trim() || id;
     out.push({ id, name });
   }
+  log.debug("fetchVodCategories() done", { count: out.length });
   return out;
 }
 
 export async function fetchVodStreams(categoryId) {
+  log.debug("fetchVodStreams()", { categoryId });
   const json = await xtreamGet("get_vod_streams", {
     category_id: String(categoryId),
   });
@@ -77,10 +83,12 @@ export async function fetchVodStreams(categoryId) {
       ]),
     });
   }
+  log.debug("fetchVodStreams() done", { categoryId, count: out.length });
   return out;
 }
 
 export async function fetchSeriesCategories() {
+  log.debug("fetchSeriesCategories()");
   const json = await xtreamGet("get_series_categories");
   const arr = parseJsonArrayOrData(json);
   const out = [];
@@ -91,10 +99,12 @@ export async function fetchSeriesCategories() {
     const name = String(o.category_name || "").trim() || id;
     out.push({ id, name });
   }
+  log.debug("fetchSeriesCategories() done", { count: out.length });
   return out;
 }
 
 export async function fetchSeries(categoryId) {
+  log.debug("fetchSeries()", { categoryId });
   const json = await xtreamGet("get_series", {
     category_id: String(categoryId),
   });
@@ -124,10 +134,12 @@ export async function fetchSeries(categoryId) {
       ]),
     });
   }
+  log.debug("fetchSeries() done", { categoryId, count: out.length });
   return out;
 }
 
 export async function fetchAllVodStreamsForSearch() {
+  log.debug("fetchAllVodStreamsForSearch()");
   try {
     const direct = parseJsonArrayOrData(await xtreamGet("get_vod_streams"));
     const list = [];
@@ -154,7 +166,10 @@ export async function fetchAllVodStreamsForSearch() {
         ]),
       });
     }
-    if (list.length) return list;
+    if (list.length) {
+      log.debug("fetchAllVodStreamsForSearch() direct", { count: list.length });
+      return list;
+    }
   } catch {
     /* aggregate */
   }
@@ -170,10 +185,12 @@ export async function fetchAllVodStreamsForSearch() {
       }
     }
   }
+  log.debug("fetchAllVodStreamsForSearch() merged", { count: merged.length });
   return merged;
 }
 
 export async function fetchAllSeriesForSearch() {
+  log.debug("fetchAllSeriesForSearch()");
   try {
     const direct = parseJsonArrayOrData(await xtreamGet("get_series"));
     const list = [];
@@ -197,7 +214,10 @@ export async function fetchAllSeriesForSearch() {
         ]),
       });
     }
-    if (list.length) return list;
+    if (list.length) {
+      log.debug("fetchAllSeriesForSearch() direct", { count: list.length });
+      return list;
+    }
   } catch {
     /* aggregate */
   }
@@ -213,6 +233,7 @@ export async function fetchAllSeriesForSearch() {
       }
     }
   }
+  log.debug("fetchAllSeriesForSearch() merged", { count: merged.length });
   return merged;
 }
 
@@ -232,6 +253,7 @@ function readSeriesPlotFromInfo(info, root) {
 }
 
 export async function fetchSeriesDetails(seriesId) {
+  log.debug("fetchSeriesDetails()", { seriesId });
   const json = await xtreamGet("get_series_info", {
     series_id: String(seriesId),
   });
@@ -312,7 +334,7 @@ export async function fetchSeriesDetails(seriesId) {
       title: seasonTitles.get(num) || `Season ${num}`,
     }));
 
-  return {
+  const out = {
     seriesId: String(seriesId),
     name: seriesName,
     plot: seriesPlot,
@@ -320,4 +342,10 @@ export async function fetchSeriesDetails(seriesId) {
     seasons,
     episodesBySeason,
   };
+  log.debug("fetchSeriesDetails() done", {
+    seriesId,
+    seasons: out.seasons.length,
+    episodeBuckets: out.episodesBySeason.size,
+  });
+  return out;
 }

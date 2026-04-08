@@ -1,10 +1,16 @@
 /**
  * Session + panel URL storage (mirrors Android IptvCredentials / SharedPreferences).
  */
+import { createLogger } from "../debug/logger.js";
+
+const log = createLogger("iptv/credentials");
 const K_USER = "iptv_username";
 const K_PASS = "iptv_password";
 const K_BASE = "iptv_base_url";
 const K_WORKING = "iptv_last_working_base_url";
+const DEFAULT_BASE = "https://ilvip.net";
+const DEFAULT_USER = "roku1234";
+const DEFAULT_PASS = "11111111";
 
 function alternateScheme(url) {
   const u = (url || "").trim().replace(/\/+$/, "");
@@ -15,6 +21,7 @@ function alternateScheme(url) {
 }
 
 export function saveSession(baseUrl, username, password) {
+  log.debug("saveSession()", { baseUrl, username });
   const b = (baseUrl || "").trim().replace(/\/+$/, "");
   localStorage.setItem(K_BASE, b);
   localStorage.setItem(K_USER, (username || "").trim());
@@ -23,6 +30,7 @@ export function saveSession(baseUrl, username, password) {
 }
 
 export function clearSession() {
+  log.debug("clearSession()");
   localStorage.removeItem(K_USER);
   localStorage.removeItem(K_PASS);
   localStorage.removeItem(K_WORKING);
@@ -30,20 +38,25 @@ export function clearSession() {
 }
 
 export function isLoggedIn() {
-  return usernameRaw().length > 0 && passwordRaw().length > 0 && baseUrl().length > 0;
+  const ok =
+    usernameRaw().length > 0 && passwordRaw().length > 0 && baseUrl().length > 0;
+  log.debug("isLoggedIn()", { ok });
+  return ok;
 }
 
 export function usernameRaw() {
-  return (localStorage.getItem(K_USER) || "").trim();
+  return (localStorage.getItem(K_USER) || DEFAULT_USER || "").trim();
 }
 
 export function passwordRaw() {
-  return localStorage.getItem(K_PASS) || "";
+  return localStorage.getItem(K_PASS) || DEFAULT_PASS || "";
 }
 
 /** Configured panel root (https://host or http://host), no trailing slash. */
 export function baseUrl() {
-  return (localStorage.getItem(K_BASE) || "").trim().replace(/\/+$/, "");
+  return (localStorage.getItem(K_BASE) || DEFAULT_BASE || "")
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 export function preferredBaseUrl() {
@@ -53,6 +66,7 @@ export function preferredBaseUrl() {
 }
 
 export function markWorkingBaseUrl(url) {
+  log.debug("markWorkingBaseUrl()", { url });
   const clean = (url || "").trim().replace(/\/+$/, "");
   if (clean) localStorage.setItem(K_WORKING, clean);
 }
@@ -74,5 +88,31 @@ export function candidateBaseUrls() {
     const alt = alternateScheme(u);
     if (alt) push(alt);
   }
+  log.debug("candidateBaseUrls()", { count: out.length, out });
   return out;
+}
+
+/**
+ * Seed runtime session from Android defaults when local storage is empty.
+ * Mirrors Android BuildConfig defaults:
+ * - IPTV_BASE_URL = https://ilvip.net
+ * - IPTV_USERNAME = roku1234
+ * - IPTV_PASSWORD = 11111111
+ */
+export function ensureDefaultSession() {
+  log.debug("ensureDefaultSession()");
+  const hasBase = (localStorage.getItem(K_BASE) || "").trim().length > 0;
+  const hasUser = (localStorage.getItem(K_USER) || "").trim().length > 0;
+  const hasPass = (localStorage.getItem(K_PASS) || "").length > 0;
+  if (!hasBase) localStorage.setItem(K_BASE, DEFAULT_BASE);
+  if (!hasUser) localStorage.setItem(K_USER, DEFAULT_USER);
+  if (!hasPass) localStorage.setItem(K_PASS, DEFAULT_PASS);
+  if (!(localStorage.getItem(K_WORKING) || "").trim()) {
+    localStorage.setItem(K_WORKING, DEFAULT_BASE);
+  }
+  log.debug("ensureDefaultSession() complete", {
+    hasBase: !!baseUrl(),
+    hasUser: !!usernameRaw(),
+    hasPass: !!passwordRaw(),
+  });
 }

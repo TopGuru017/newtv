@@ -4,8 +4,12 @@
 import * as cred from "./credentials.js";
 import { httpGetText } from "./xapi.js";
 import { decodeXtreamText } from "./parse.js";
+import { createLogger } from "../debug/logger.js";
+
+const log = createLogger("iptv/xauth");
 
 export async function verify(baseUrl, username, password) {
+  log.debug("verify() start", { baseUrl, username });
   const base = (baseUrl || "").trim().replace(/\/+$/, "");
   const u = encodeURIComponent((username || "").trim());
   const p = encodeURIComponent(password || "");
@@ -20,4 +24,5 @@ export async function verify(baseUrl, username, password) {
   if (Number(user.auth) !== 1) {
     throw new Error(decodeXtreamText(user.message) || "Unauthorized");
   }
+  log.debug("verify() success", { baseUrl: base, username });
 }

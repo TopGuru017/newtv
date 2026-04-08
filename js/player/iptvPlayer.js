@@ -3,6 +3,9 @@
  * MKV is rejected (container rarely supported on TV web).
  */
 import { alternateHttpScheme } from "../iptv/streamUrls.js";
+import { createLogger } from "../debug/logger.js";
+
+const log = createLogger("player/iptvPlayer");
 
 function isMkv(url) {
   return /\.mkv(\?|$)/i.test(url.split("?")[0] || "");
@@ -25,6 +28,7 @@ function destroyHls(videoEl) {
 }
 
 export function stop(videoEl) {
+  log.debug("stop()");
   destroyHls(videoEl);
   videoEl.removeAttribute("src");
   videoEl.load();
@@ -36,17 +40,20 @@ export function stop(videoEl) {
  * @param {{ triedAlt?: boolean }} [opts]
  */
 export async function playUrl(videoEl, url, opts = {}) {
+  log.debug("playUrl() start", { url, opts });
   stop(videoEl);
   const u = (url || "").trim();
   if (!u) throw new Error("Empty URL");
 
   if (isMkv(u)) {
+    log.warn("playUrl() rejected mkv", { url: u });
     throw new Error(
       "MKV is not supported in the TV browser. Use HLS (.m3u8) or MP4 from your provider.",
     );
   }
 
   if (!isHlsUrl(u)) {
+    log.debug("playUrl() native", { url: u });
     return playNative(videoEl, u);
   }
 
@@ -54,6 +61,7 @@ export async function playUrl(videoEl, url, opts = {}) {
     try {
       videoEl.src = u;
       await videoEl.play();
+      log.debug("playUrl() native hls succeeded", { url: u });
       return;
     } catch {
       videoEl.removeAttribute("src");
@@ -62,12 +70,14 @@ export async function playUrl(videoEl, url, opts = {}) {
 
   const Hls = globalThis.Hls;
   if (Hls && Hls.isSupported()) {
+    log.debug("playUrl() hls.js", { url: u });
     await playHlsJs(videoEl, u);
     return;
   }
 
   videoEl.src = u;
   await videoEl.play();
+  log.debug("playUrl() final native hls", { url: u });
 }
 
 function playNative(videoEl, url) {
@@ -85,6 +95,7 @@ function playHlsJs(videoEl, url) {
     });
     videoEl._hls = hls;
     hls.on(Hls.Events.ERROR, async (_, data) => {
+      log.warn("hls error", { url, type: data?.type, details: data?.details, fatal: data?.fatal });
       if (!data.fatal) return;
       const alt = alternateHttpScheme(url);
       if (alt && data.type === Hls.ErrorTypes.NETWORK_ERROR) {

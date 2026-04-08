@@ -8,6 +8,11 @@ import {
   formatTimeRangeIsrael,
 } from "./iptv/timeUtils.js";
 import { playUrl, stop } from "./player/iptvPlayer.js";
+import * as favStore from "./store/favorites.js";
+import * as lastWatchStore from "./store/lastWatch.js";
+import * as searchHistoryStore from "./store/searchHistory.js";
+import * as settingsStore from "./store/settings.js";
+import { createLogger } from "./debug/logger.js";
 
 /** Set to `false` to show the sign-in screen again. */
 const SKIP_SIGNIN = true;
@@ -15,6 +20,7 @@ const SKIP_SIGNIN = true;
 /** @typedef {{ text: string, detail?: string, onSelect: () => void | Promise<void>, vodRating?: boolean }} Row */
 
 const $ = (id) => document.getElementById(id);
+const log = createLogger("app");
 
 const LANG_KEY = "iptv_ui_lang";
 
@@ -41,6 +47,22 @@ const STR = {
     vod_series: "SERIES",
     vod_movies: "MOVIES",
     settings: "SETTINGS",
+    action_play: "Play",
+    action_add_fav: "Add to favorites",
+    action_remove_fav: "Remove from favorites",
+    action_resume: "Resume",
+    action_restart: "Start from beginning",
+    action_search_now: "New search",
+    action_clear_history: "Clear search history",
+    action_clear_favorites: "Clear favorites",
+    action_clear_lastwatch: "Clear last watch",
+    label_search_results: "Search results",
+    label_settings_saved: "Settings updated",
+    settings_language: "Language",
+    settings_autoplay: "Autoplay on select",
+    settings_sidebar_collapsed: "Sidebar collapsed by default",
+    settings_panel: "Panel URL",
+    settings_account: "Account",
     placeholder_title: "Coming soon",
     placeholder_sub: "This screen is not in the web version yet.",
     profile_title: "Profile",
@@ -72,6 +94,22 @@ const STR = {
     vod_series: "תוכניות",
     vod_movies: "סרטים",
     settings: "הגדרות",
+    action_play: "נגן",
+    action_add_fav: "הוסף למועדפים",
+    action_remove_fav: "הסר ממועדפים",
+    action_resume: "המשך",
+    action_restart: "התחל מהתחלה",
+    action_search_now: "חיפוש חדש",
+    action_clear_history: "נקה היסטוריית חיפוש",
+    action_clear_favorites: "נקה מועדפים",
+    action_clear_lastwatch: "נקה צפייה אחרונה",
+    label_search_results: "תוצאות חיפוש",
+    label_settings_saved: "ההגדרות עודכנו",
+    settings_language: "שפה",
+    settings_autoplay: "ניגון אוטומטי בעת בחירה",
+    settings_sidebar_collapsed: "סרגל צד ממוזער כברירת מחדל",
+    settings_panel: "כתובת שרת",
+    settings_account: "חשבון",
     placeholder_title: "בקרוב",
     placeholder_sub: "מסך זה עדיין לא בגרסת הווב.",
     profile_title: "פרופיל",
@@ -120,10 +158,15 @@ let sidebarFocusIndex = 0;
 let vodMenuOpen = false;
 /** @type {string} */
 let activeNav = "live";
+let settings = settingsStore.getSettings();
+let currentPlayback = null;
+let lastPersistAtMs = 0;
 
 const KEY_BACK = new Set([10009, 461, 27, 8]);
 
 function lang() {
+  const fromSettings = settings?.language;
+  if (fromSettings === "he" || fromSettings === "en") return fromSettings;
   return localStorage.getItem(LANG_KEY) === "he" ? "he" : "en";
 }
 
@@ -132,6 +175,7 @@ function t(key) {
 }
 
 function showError(el, msg) {
+  log.debug("showError()", { target: el?.id, msg: msg || "" });
   if (!msg) {
     el.hidden = true;
     el.textContent = "";
@@ -202,13 +246,51 @@ function syncVodSubmenu() {
   iptvSidebar.classList.toggle("iptv-sidebar--vod-open", vodMenuOpen);
 }
 
-async function openPlayer(title, streamUrl) {
+function attachPlaybackPersistence() {
+  if (!currentPlayback) return;
+  const pos = Number(videoEl.currentTime || 0);
+  const durRaw = Number(videoEl.duration || 0);
+  const dur = Number.isFinite(durRaw) ? durRaw : 0;
+  lastWatchStore.updatePlaybackPosition(
+    currentPlayback.type,
+    currentPlayback.id,
+    pos,
+    dur,
+  );
+}
+
+function maybePersistPlaybackTick() {
+  const now = Date.now();
+  if (now - lastPersistAtMs < 4000) return;
+  lastPersistAtMs = now;
+  attachPlaybackPersistence();
+}
+
+async function openPlayer(title, streamUrl, playbackMeta = null) {
+  log.debug("openPlayer()", { title, streamUrl, playbackMeta });
   showError(playerError, "");
   playerTitle.textContent = title;
+  currentPlayback = playbackMeta;
+  if (currentPlayback) {
+    lastWatchStore.upsertLastWatch({
+      ...currentPlayback,
+      title,
+      streamUrl,
+      positionSec: 0,
+      durationSec: 0,
+    });
+  }
   showView("player");
   try {
     await playUrl(videoEl, streamUrl);
+    if (currentPlayback?.positionSec > 5 && Number(videoEl.duration || 0) > 0) {
+      videoEl.currentTime = Math.min(
+        currentPlayback.positionSec,
+        Number(videoEl.duration || 0) - 2,
+      );
+    }
   } catch (e) {
+    log.error("openPlayer() failed", { title, streamUrl, message: e?.message });
     const alt = urls.alternateHttpScheme(streamUrl);
     if (alt) {
       try {
@@ -223,19 +305,24 @@ async function openPlayer(title, streamUrl) {
 }
 
 function closePlayer() {
+  log.debug("closePlayer()");
+  attachPlaybackPersistence();
   stop(videoEl);
   showError(playerError, "");
+  currentPlayback = null;
   showView("app");
   requestAnimationFrame(() => renderFrame());
 }
 
 function pushFrame(frame) {
+  log.debug("pushFrame()", { title: frame?.title, sub: frame?.sub });
   stack.push(frame);
   focusIndex = 0;
   renderFrame();
 }
 
 function popFrame() {
+  log.debug("popFrame()", { stackSize: stack.length });
   if (stack.length <= 1) return false;
   stack.pop();
   focusIndex = 0;
@@ -244,6 +331,7 @@ function popFrame() {
 }
 
 async function renderFrame() {
+  log.debug("renderFrame()", { stackSize: stack.length });
   const top = stack[stack.length - 1];
   if (!top) return;
   contentTitle.textContent = top.title;
@@ -255,6 +343,7 @@ async function renderFrame() {
   try {
     rows = await top.load();
   } catch (e) {
+    log.error("renderFrame() load error", { message: e?.message, title: top?.title });
     showError(appError, (e && e.message) || String(e));
     rows = [];
   } finally {
@@ -321,6 +410,7 @@ function activateListFocus() {
 
 /* ——— Sections ——— */
 function startNoSessionHome() {
+  log.warn("startNoSessionHome()");
   stack = [];
   setActiveNav("live");
   $("sidebar-profile-name").textContent = t("profile_title").toUpperCase();
@@ -333,6 +423,7 @@ function startNoSessionHome() {
 }
 
 function startLive() {
+  log.debug("startLive()");
   if (!cred.isLoggedIn()) {
     startNoSessionHome();
     return;
@@ -361,13 +452,68 @@ function openLiveCategory(categoryId, name) {
       return streams.map((s) => ({
         text: s.name,
         detail: s.tvArchive ? (lang() === "he" ? "ארכיון" : "Catch-up") : "",
-        onSelect: () => openPlayer(s.name, urls.liveStreamUrl(s.streamId)),
+        onSelect: () => openLiveChannelActions(s),
+      }));
+    },
+  });
+}
+
+function openLiveChannelActions(stream) {
+  const favItem = {
+    type: "live",
+    id: String(stream.streamId),
+    title: stream.name,
+    streamId: String(stream.streamId),
+  };
+  pushFrame({
+    title: stream.name,
+    sub: lang() === "he" ? "פעולות" : "Actions",
+    load: async () => {
+      const isFav = favStore.isFavorite("live", String(stream.streamId));
+      return [
+        {
+          text: t("action_play"),
+          onSelect: () =>
+            openPlayer(stream.name, urls.liveStreamUrl(stream.streamId), {
+              type: "live",
+              id: String(stream.streamId),
+              title: stream.name,
+              categoryId: stream.categoryId || null,
+            }),
+        },
+        {
+          text: isFav ? t("action_remove_fav") : t("action_add_fav"),
+          onSelect: () => {
+            favStore.toggleFavorite(favItem);
+            renderFrame();
+          },
+        },
+        {
+          text: lang() === "he" ? "EPG קצר" : "Short EPG",
+          onSelect: () => openLiveShortEpg(stream),
+        },
+      ];
+    },
+  });
+}
+
+function openLiveShortEpg(stream) {
+  pushFrame({
+    title: stream.name,
+    sub: lang() === "he" ? "לוח שידורים קצר" : "Short EPG",
+    load: async () => {
+      const epg = await xlive.fetchShortEpg(stream.streamId, 12);
+      return epg.map((row) => ({
+        text: row.title,
+        detail: formatTimeRangeIsrael(row.startUnix, row.endUnix),
+        onSelect: () => {},
       }));
     },
   });
 }
 
 function startVodMovies() {
+  log.debug("startVodMovies()");
   if (!cred.isLoggedIn()) {
     startNoSessionHome();
     return;
@@ -402,14 +548,54 @@ function openVodCategory(categoryId, name) {
         detail: m.plot
           ? m.plot.slice(0, 80) + (m.plot.length > 80 ? "…" : "")
           : m.containerExtension,
-        onSelect: () =>
-          openPlayer(m.name, urls.vodMovieUrl(m.streamId, m.containerExtension)),
+        onSelect: () => openVodMovieActions(m),
       }));
     },
   });
 }
 
+function openVodMovieActions(movie) {
+  const favItem = {
+    type: "vod",
+    id: String(movie.streamId),
+    title: movie.name,
+    streamId: String(movie.streamId),
+    ext: movie.containerExtension,
+  };
+  pushFrame({
+    title: movie.name,
+    sub: movie.plot || (lang() === "he" ? "סרט VOD" : "VOD movie"),
+    load: async () => {
+      const isFav = favStore.isFavorite("vod", String(movie.streamId));
+      return [
+        {
+          text: t("action_play"),
+          onSelect: () =>
+            openPlayer(
+              movie.name,
+              urls.vodMovieUrl(movie.streamId, movie.containerExtension),
+              {
+                type: "vod",
+                id: String(movie.streamId),
+                title: movie.name,
+                categoryId: movie.categoryId || null,
+              },
+            ),
+        },
+        {
+          text: isFav ? t("action_remove_fav") : t("action_add_fav"),
+          onSelect: () => {
+            favStore.toggleFavorite(favItem);
+            renderFrame();
+          },
+        },
+      ];
+    },
+  });
+}
+
 function startSeries() {
+  log.debug("startSeries()");
   if (!cred.isLoggedIn()) {
     startNoSessionHome();
     return;
@@ -440,8 +626,37 @@ function openSeriesCategory(categoryId, name) {
         detail: s.plot
           ? s.plot.slice(0, 80) + (s.plot.length > 80 ? "…" : "")
           : "",
-        onSelect: () => openSeriesDetail(s.seriesId, s.name),
+        onSelect: () => openSeriesShowActions(s),
       }));
+    },
+  });
+}
+
+function openSeriesShowActions(show) {
+  const favItem = {
+    type: "series",
+    id: String(show.seriesId),
+    title: show.name,
+    seriesId: String(show.seriesId),
+  };
+  pushFrame({
+    title: show.name,
+    sub: show.plot || (lang() === "he" ? "סדרה" : "Series"),
+    load: async () => {
+      const isFav = favStore.isFavorite("series", String(show.seriesId));
+      return [
+        {
+          text: lang() === "he" ? "פתח עונות/פרקים" : "Open seasons / episodes",
+          onSelect: () => openSeriesDetail(show.seriesId, show.name),
+        },
+        {
+          text: isFav ? t("action_remove_fav") : t("action_add_fav"),
+          onSelect: () => {
+            favStore.toggleFavorite(favItem);
+            renderFrame();
+          },
+        },
+      ];
     },
   });
 }
@@ -472,11 +687,7 @@ async function openSeriesDetail(seriesId, name) {
           rows.push({
             text: `${se.title} · E${ep.episodeNumber} — ${ep.title}`,
             detail: ep.plot ? ep.plot.slice(0, 60) + "…" : "",
-            onSelect: () =>
-              openPlayer(
-                `${details.name} — ${ep.title}`,
-                urls.seriesEpisodeUrl(ep.episodeId, ep.containerExtension),
-              ),
+            onSelect: () => openSeriesEpisodeActions(details, ep),
           });
         }
       }
@@ -485,7 +696,29 @@ async function openSeriesDetail(seriesId, name) {
   });
 }
 
+function openSeriesEpisodeActions(details, ep) {
+  const title = `${details.name} — ${ep.title}`;
+  const streamUrl = urls.seriesEpisodeUrl(ep.episodeId, ep.containerExtension);
+  pushFrame({
+    title,
+    sub: ep.plot || (lang() === "he" ? "פרק" : "Episode"),
+    load: async () => [
+      {
+        text: t("action_play"),
+        onSelect: () =>
+          openPlayer(title, streamUrl, {
+            type: "series-episode",
+            id: String(ep.episodeId),
+            title,
+            seasonNumber: ep.seasonNumber,
+          }),
+      },
+    ],
+  });
+}
+
 function startRecords() {
+  log.debug("startRecords()");
   if (!cred.isLoggedIn()) {
     startNoSessionHome();
     return;
@@ -552,24 +785,311 @@ function openCatchupEpg(stream) {
             e.startRaw,
             e.endRaw,
           );
-          openPlayer(e.title, u);
+          openPlayer(e.title, u, {
+            type: "record",
+            id: `${stream.streamId}:${e.startUnix}`,
+            title: e.title,
+            streamId: String(stream.streamId),
+            startUnix: e.startUnix,
+            endUnix: e.endUnix,
+          });
         },
       }));
     },
   });
 }
 
-function startPlaceholder() {
+async function runSearchFlow(initialQuery) {
+  let query = String(initialQuery || "").trim();
+  if (!query) {
+    const q = globalThis.prompt?.(
+      lang() === "he" ? "חיפוש" : "Search",
+      "",
+    );
+    query = String(q || "").trim();
+  }
+  if (!query) return;
+  searchHistoryStore.pushSearchQuery(query);
+  setLoading(true);
+  showError(appError, "");
+  try {
+    const [live, vod, series] = await Promise.all([
+      xlive.fetchAllLiveStreamsForSearch().catch(() => []),
+      xvod.fetchAllVodStreamsForSearch().catch(() => []),
+      xvod.fetchAllSeriesForSearch().catch(() => []),
+    ]);
+    const qLower = query.toLowerCase();
+    const liveRows = live
+      .filter((x) => String(x.name || "").toLowerCase().includes(qLower))
+      .slice(0, 30)
+      .map((x) => ({
+        text: `[LIVE] ${x.name}`,
+        detail: x.categoryId || "",
+        onSelect: () => openLiveChannelActions(x),
+      }));
+    const vodRows = vod
+      .filter((x) => String(x.name || "").toLowerCase().includes(qLower))
+      .slice(0, 30)
+      .map((x) => ({
+        text: `[VOD] ${x.name}`,
+        detail: x.plot ? x.plot.slice(0, 80) : "",
+        onSelect: () => openVodMovieActions(x),
+      }));
+    const seriesRows = series
+      .filter((x) => String(x.name || "").toLowerCase().includes(qLower))
+      .slice(0, 30)
+      .map((x) => ({
+        text: `[SERIES] ${x.name}`,
+        detail: x.plot ? x.plot.slice(0, 80) : "",
+        onSelect: () => openSeriesShowActions(x),
+      }));
+    const resultRows = [
+      {
+        text: t("action_search_now"),
+        onSelect: () => runSearchFlow(""),
+      },
+      ...liveRows,
+      ...vodRows,
+      ...seriesRows,
+    ];
+    pushFrame({
+      title: t("label_search_results"),
+      sub: `"${query}"`,
+      load: async () => resultRows,
+    });
+  } finally {
+    setLoading(false);
+  }
+}
+
+function startSearch() {
+  log.debug("startSearch()");
   stack = [];
-  setActiveNav("none");
+  setActiveNav("search");
   pushFrame({
-    title: t("placeholder_title"),
-    sub: t("placeholder_sub"),
-    load: async () => [],
+    title: t("search"),
+    sub: lang() === "he" ? "היסטוריה וחיפוש" : "History and search",
+    load: async () => {
+      const history = searchHistoryStore.listSearchHistory();
+      /** @type {Row[]} */
+      const rows = [
+        {
+          text: t("action_search_now"),
+          onSelect: () => runSearchFlow(""),
+        },
+      ];
+      for (const q of history) {
+        rows.push({
+          text: q,
+          onSelect: () => runSearchFlow(q),
+        });
+      }
+      rows.push({
+        text: t("action_clear_history"),
+        onSelect: () => {
+          searchHistoryStore.clearSearchHistory();
+          renderFrame();
+        },
+      });
+      return rows;
+    },
+  });
+}
+
+function startFavorites() {
+  log.debug("startFavorites()");
+  stack = [];
+  setActiveNav("favorites");
+  pushFrame({
+    title: t("favorites"),
+    sub: lang() === "he" ? "כל המועדפים" : "All favorites",
+    load: async () => {
+      const all = favStore.listFavorites();
+      /** @type {Row[]} */
+      const rows = all.map((f) => ({
+        text: `[${String(f.type || "").toUpperCase()}] ${f.title || f.id}`,
+        onSelect: () => openFavoriteItem(f),
+      }));
+      rows.push({
+        text: t("action_clear_favorites"),
+        onSelect: () => {
+          favStore.clearFavorites();
+          renderFrame();
+        },
+      });
+      return rows;
+    },
+  });
+}
+
+function openFavoriteItem(f) {
+  if (f.type === "live") {
+    openPlayer(
+      f.title || f.id,
+      urls.liveStreamUrl(f.streamId || f.id),
+      { type: "live", id: String(f.streamId || f.id), title: f.title || f.id },
+    );
+    return;
+  }
+  if (f.type === "vod") {
+    openPlayer(
+      f.title || f.id,
+      urls.vodMovieUrl(f.streamId || f.id, f.ext || "mp4"),
+      { type: "vod", id: String(f.streamId || f.id), title: f.title || f.id },
+    );
+    return;
+  }
+  if (f.type === "series") {
+    openSeriesDetail(String(f.seriesId || f.id), f.title || String(f.id));
+    return;
+  }
+}
+
+function startLastWatch() {
+  log.debug("startLastWatch()");
+  stack = [];
+  setActiveNav("lastwatch");
+  pushFrame({
+    title: t("lastwatch"),
+    sub: lang() === "he" ? "המשך צפייה" : "Continue watching",
+    load: async () => {
+      const all = lastWatchStore.listLastWatch();
+      const rows = all.map((x) => ({
+        text: x.title || x.id,
+        detail:
+          x.positionSec > 0
+            ? `${lang() === "he" ? "התקדמות" : "Progress"}: ${Math.floor(
+                x.positionSec,
+              )}s`
+            : "",
+        onSelect: () => openLastWatchActions(x),
+      }));
+      rows.push({
+        text: t("action_clear_lastwatch"),
+        onSelect: () => {
+          lastWatchStore.clearLastWatch();
+          renderFrame();
+        },
+      });
+      return rows;
+    },
+  });
+}
+
+function openLastWatchActions(item) {
+  pushFrame({
+    title: item.title || item.id,
+    sub: lang() === "he" ? "בחירה" : "Select action",
+    load: async () => [
+      {
+        text: t("action_resume"),
+        onSelect: () =>
+          openPlayer(item.title || item.id, item.streamUrl, {
+            ...item,
+            positionSec: item.positionSec || 0,
+          }),
+      },
+      {
+        text: t("action_restart"),
+        onSelect: () =>
+          openPlayer(item.title || item.id, item.streamUrl, {
+            ...item,
+            positionSec: 0,
+          }),
+      },
+    ],
+  });
+}
+
+function startTvGuide() {
+  log.debug("startTvGuide()");
+  stack = [];
+  setActiveNav("tvguide");
+  pushFrame({
+    title: t("tvguide"),
+    sub: lang() === "he" ? "בחר ערוץ להצגת EPG" : "Choose a channel for EPG",
+    load: async () => {
+      const streams = await xlive.fetchAllLiveStreams().catch(() => []);
+      const rows = streams.slice(0, 200).map((s) => ({
+        text: s.name,
+        onSelect: () => openTvGuideChannel(s),
+      }));
+      return rows;
+    },
+  });
+}
+
+function openTvGuideChannel(stream) {
+  pushFrame({
+    title: stream.name,
+    sub: lang() === "he" ? "לוח שידורים מלא" : "Full EPG",
+    load: async () => {
+      const epg = await xlive.fetchFullEpg(stream.streamId, 80).catch(() => []);
+      return epg.map((row) => ({
+        text: row.title,
+        detail: formatTimeRangeIsrael(row.startUnix, row.endUnix),
+        onSelect: () => {},
+      }));
+    },
+  });
+}
+
+function startSettings() {
+  log.debug("startSettings()");
+  stack = [];
+  setActiveNav("settings");
+  pushFrame({
+    title: t("settings"),
+    sub: lang() === "he" ? "אפשרויות מערכת" : "System options",
+    load: async () => {
+      const s = settingsStore.getSettings();
+      settings = s;
+      return [
+        {
+          text: `${t("settings_language")}: ${s.language.toUpperCase()}`,
+          onSelect: () => {
+            const nextLang = s.language === "he" ? "en" : "he";
+            settings = settingsStore.updateSettings({ language: nextLang });
+            localStorage.setItem(LANG_KEY, nextLang);
+            applyLoginI18n();
+            applySidebarI18n();
+            renderFrame();
+          },
+        },
+        {
+          text: `${t("settings_autoplay")}: ${
+            s.autoplayOnSelect ? "ON" : "OFF"
+          }`,
+          onSelect: () => {
+            settings = settingsStore.updateSettings({
+              autoplayOnSelect: !s.autoplayOnSelect,
+            });
+            renderFrame();
+          },
+        },
+        {
+          text: `${t("settings_sidebar_collapsed")}: ${
+            s.sidebarCollapsedByDefault ? "ON" : "OFF"
+          }`,
+          onSelect: () => {
+            settings = settingsStore.updateSettings({
+              sidebarCollapsedByDefault: !s.sidebarCollapsedByDefault,
+            });
+            renderFrame();
+          },
+        },
+        { text: `${t("settings_panel")}: ${cred.baseUrl() || "-"}`, onSelect: () => {} },
+        {
+          text: `${t("settings_account")}: ${cred.usernameRaw() || "-"}`,
+          onSelect: () => {},
+        },
+      ];
+    },
   });
 }
 
 function startProfile() {
+  log.debug("startProfile()");
   stack = [];
   setActiveNav("profile");
   const name = cred.usernameRaw().trim() || t("profile_title");
@@ -596,6 +1116,7 @@ function startProfile() {
 }
 
 function handleSidebarNav(nav) {
+  log.debug("handleSidebarNav()", { nav });
   if (nav === "vod") {
     vodMenuOpen = !vodMenuOpen;
     syncVodSubmenu();
@@ -610,11 +1131,19 @@ function handleSidebarNav(nav) {
       startProfile();
       break;
     case "search":
+      startSearch();
+      break;
     case "favorites":
+      startFavorites();
+      break;
     case "lastwatch":
+      startLastWatch();
+      break;
     case "tvguide":
+      startTvGuide();
+      break;
     case "settings":
-      startPlaceholder();
+      startSettings();
       break;
     case "live":
       startLive();
@@ -637,6 +1166,7 @@ function handleSidebarNav(nav) {
 }
 
 function activateSidebarSelection() {
+  log.debug("activateSidebarSelection()", { sidebarFocusIndex });
   const els = getSidebarFocusables();
   const el = els[sidebarFocusIndex];
   const nav = el?.getAttribute("data-nav");
@@ -710,11 +1240,13 @@ function bindLogin() {
 
   $("login-lang-he").addEventListener("click", () => {
     localStorage.setItem(LANG_KEY, "he");
+    settings = settingsStore.updateSettings({ language: "he" });
     applyLoginI18n();
     applySidebarI18n();
   });
   $("login-lang-en").addEventListener("click", () => {
     localStorage.setItem(LANG_KEY, "en");
+    settings = settingsStore.updateSettings({ language: "en" });
     applyLoginI18n();
     applySidebarI18n();
   });
@@ -769,6 +1301,7 @@ function bindSidebarPointer() {
     const els = getSidebarFocusables();
     const idx = els.indexOf(row);
     if (idx < 0) return;
+    log.debug("sidebar click", { nav: row.getAttribute("data-nav"), idx });
     sidebarFocusIndex = idx;
     applySidebarFocus();
     activateSidebarSelection();
@@ -777,6 +1310,7 @@ function bindSidebarPointer() {
 
 function bindKeys() {
   document.addEventListener("keydown", (ev) => {
+    log.debug("keydown", { key: ev.key, keyCode: ev.keyCode, focusZone });
     if (!viewPlayer.hidden) {
       if (KEY_BACK.has(ev.keyCode)) {
         ev.preventDefault();
@@ -856,6 +1390,10 @@ function bindKeys() {
 }
 
 function boot() {
+  log.debug("boot()");
+  if (SKIP_SIGNIN) {
+    cred.ensureDefaultSession();
+  }
   injectSidebarIcons();
   applyLoginI18n();
   applySidebarI18n();
@@ -865,6 +1403,9 @@ function boot() {
   bindLogin();
   bindSidebarPointer();
   bindKeys();
+  videoEl.addEventListener("timeupdate", maybePersistPlaybackTick);
+  videoEl.addEventListener("pause", attachPlaybackPersistence);
+  videoEl.addEventListener("ended", attachPlaybackPersistence);
 
   showView("app");
   vodMenuOpen = false;
@@ -875,7 +1416,7 @@ function boot() {
     $("sidebar-profile-name").textContent = u.toUpperCase();
     $("sidebar-avatar-initial").textContent = u.charAt(0).toUpperCase() || "?";
     startLive();
-    setShellZone("content");
+    setShellZone(settings.sidebarCollapsedByDefault ? "content" : "sidebar");
     focusIndex = 0;
     sidebarFocusIndex = getSidebarFocusables().findIndex(
       (e) => e.getAttribute("data-nav") === "live",
@@ -883,7 +1424,7 @@ function boot() {
     if (sidebarFocusIndex < 0) sidebarFocusIndex = 0;
   } else {
     startNoSessionHome();
-    setShellZone("content");
+    setShellZone(settings.sidebarCollapsedByDefault ? "content" : "sidebar");
     focusIndex = 0;
     sidebarFocusIndex = getSidebarFocusables().findIndex(
       (e) => e.getAttribute("data-nav") === "live",

@@ -3,6 +3,9 @@
  */
 import { decodeXtreamText, parseJsonArrayOrData } from "./parse.js";
 import { xtreamGet } from "./xapi.js";
+import { createLogger } from "../debug/logger.js";
+
+const log = createLogger("iptv/xlive");
 
 function parseCategories(arr) {
   const out = [];
@@ -131,28 +134,41 @@ function parseEpgStandard(jsonText) {
 }
 
 export async function fetchLiveCategories() {
+  log.debug("fetchLiveCategories()");
   const json = await xtreamGet("get_live_categories");
-  return parseCategories(parseJsonArrayOrData(json));
+  const out = parseCategories(parseJsonArrayOrData(json));
+  log.debug("fetchLiveCategories() done", { count: out.length });
+  return out;
 }
 
 export async function fetchLiveStreams(categoryId) {
+  log.debug("fetchLiveStreams()", { categoryId });
   const json = await xtreamGet("get_live_streams", {
     category_id: String(categoryId),
   });
-  return parseStreams(parseJsonArrayOrData(json));
+  const out = parseStreams(parseJsonArrayOrData(json));
+  log.debug("fetchLiveStreams() done", { categoryId, count: out.length });
+  return out;
 }
 
 export async function fetchAllLiveStreams() {
+  log.debug("fetchAllLiveStreams()");
   const json = await xtreamGet("get_live_streams");
-  return parseStreams(parseJsonArrayOrData(json));
+  const out = parseStreams(parseJsonArrayOrData(json));
+  log.debug("fetchAllLiveStreams() done", { count: out.length });
+  return out;
 }
 
 export async function fetchAllLiveStreamsForSearch() {
+  log.debug("fetchAllLiveStreamsForSearch()");
   try {
     const direct = parseStreams(
       parseJsonArrayOrData(await xtreamGet("get_live_streams")),
     );
-    if (direct.length) return direct;
+    if (direct.length) {
+      log.debug("fetchAllLiveStreamsForSearch() direct", { count: direct.length });
+      return direct;
+    }
   } catch {
     /* fall through */
   }
@@ -168,38 +184,56 @@ export async function fetchAllLiveStreamsForSearch() {
       }
     }
   }
+  log.debug("fetchAllLiveStreamsForSearch() merged", { count: merged.length });
   return merged;
 }
 
 export async function fetchTvArchiveStreams() {
+  log.debug("fetchTvArchiveStreams()");
   const all = await fetchAllLiveStreamsForSearch();
-  return all.filter((s) => s.tvArchive);
+  const out = all.filter((s) => s.tvArchive);
+  log.debug("fetchTvArchiveStreams() done", { count: out.length });
+  return out;
 }
 
 export async function fetchTvArchiveStreamsForCategory(categoryId) {
+  log.debug("fetchTvArchiveStreamsForCategory()", { categoryId });
   if (categoryId != null && categoryId !== "") {
-    return (await fetchLiveStreams(categoryId)).filter((s) => s.tvArchive);
+    const out = (await fetchLiveStreams(categoryId)).filter((s) => s.tvArchive);
+    log.debug("fetchTvArchiveStreamsForCategory() category", {
+      categoryId,
+      count: out.length,
+    });
+    return out;
   }
   const bulk = (await fetchAllLiveStreams().catch(() => [])).filter(
     (s) => s.tvArchive,
   );
-  if (bulk.length) return bulk;
+  if (bulk.length) {
+    log.debug("fetchTvArchiveStreamsForCategory() all bulk", { count: bulk.length });
+    return bulk;
+  }
   return fetchTvArchiveStreams();
 }
 
 export async function fetchShortEpg(streamId, limit = 8) {
+  log.debug("fetchShortEpg()", { streamId, limit });
   const json = await xtreamGet("get_short_epg", {
     stream_id: String(streamId),
     limit: String(limit),
   });
-  return parseEpgStandard(json);
+  const out = parseEpgStandard(json);
+  log.debug("fetchShortEpg() done", { streamId, count: out.length });
+  return out;
 }
 
 export async function fetchFullEpg(streamId, limit = 50) {
+  log.debug("fetchFullEpg()", { streamId, limit });
   return fetchShortEpg(streamId, limit);
 }
 
 export async function fetchArchiveEpgTable(streamId) {
+  log.debug("fetchArchiveEpgTable()", { streamId });
   let table = [];
   try {
     const json = await xtreamGet("get_simple_data_table", {
@@ -209,10 +243,15 @@ export async function fetchArchiveEpgTable(streamId) {
   } catch {
     table = [];
   }
-  if (table.length) return table;
+  if (table.length) {
+    log.debug("fetchArchiveEpgTable() simple_data_table", { streamId, count: table.length });
+    return table;
+  }
   const json = await xtreamGet("get_short_epg", {
     stream_id: String(streamId),
     limit: "500",
   });
-  return parseEpgStandard(json);
+  const out = parseEpgStandard(json);
+  log.debug("fetchArchiveEpgTable() fallback", { streamId, count: out.length });
+  return out;
 }
