@@ -12,12 +12,13 @@ import * as favStore from "./store/favorites.js";
 import * as lastWatchStore from "./store/lastWatch.js";
 import * as searchHistoryStore from "./store/searchHistory.js";
 import * as settingsStore from "./store/settings.js";
+import * as liveHubCache from "./store/liveHubCache.js";
 import { createLogger } from "./debug/logger.js";
 
 /** Set to `false` to show the sign-in screen again. */
 const SKIP_SIGNIN = true;
 
-/** @typedef {{ text: string, detail?: string, onSelect: () => void | Promise<void>, vodRating?: boolean }} Row */
+/** @typedef {{ text: string, detail?: string, onSelect: () => void | Promise<void>, vodRating?: boolean, kind?: string, selected?: boolean, iconUrl?: string, categoryId?: string }} Row */
 
 const $ = (id) => document.getElementById(id);
 const log = createLogger("app");
@@ -138,6 +139,9 @@ const viewPlayer = $("view-player");
 const shell = $("shell");
 const iptvSidebar = $("iptv-sidebar");
 const listEl = $("list");
+const mainContent = $("main-content");
+const liveHubPreview = $("live-hub-preview");
+const liveHubPreviewImg = /** @type {HTMLImageElement | null} */ ($("live-hub-preview-img"));
 const contentTitle = $("content-title");
 const contentSub = $("content-sub");
 const appError = $("app-error");
@@ -158,6 +162,10 @@ let sidebarFocusIndex = 0;
 let vodMenuOpen = false;
 /** @type {string} */
 let activeNav = "live";
+let liveHubCategoryId = null;
+let liveHubCategoryFocusTimer = 0;
+/** One-shot: after opening Live hub, focus first channel tile (first row of grid). */
+let liveHubFocusFirstChannelOnLoad = false;
 let settings = settingsStore.getSettings();
 let currentPlayback = null;
 let lastPersistAtMs = 0;
@@ -201,6 +209,7 @@ function setShellZone(zone) {
   shell.classList.toggle("shell--sidebar-focused", zone === "sidebar");
   if (zone === "sidebar") {
     applySidebarFocus();
+    if (isLiveHubActive()) updateLiveHubPreview();
   } else {
     document
       .querySelectorAll(".sidebar-row--focus")
@@ -311,7 +320,17 @@ function closePlayer() {
   showError(playerError, "");
   currentPlayback = null;
   showView("app");
-  requestAnimationFrame(() => renderFrame());
+  requestAnimationFrame(() => {
+    if (
+      activeNav === "live" &&
+      stack.length === 1 &&
+      liveHubCache.isLiveHubCacheReady()
+    ) {
+      void renderFrame({ skipLoading: true });
+    } else {
+      void renderFrame();
+    }
+  });
 }
 
 function pushFrame(frame) {
@@ -330,15 +349,22 @@ function popFrame() {
   return true;
 }
 
-async function renderFrame() {
-  log.debug("renderFrame()", { stackSize: stack.length });
+/**
+ * @param {{ skipLoading?: boolean }} [options]
+ * Use `skipLoading: true` for live hub category switches when data is already cached (no full-screen loading).
+ */
+async function renderFrame(options = {}) {
+  const skipLoading = options.skipLoading === true;
+  log.debug("renderFrame()", { stackSize: stack.length, skipLoading });
   const top = stack[stack.length - 1];
   if (!top) return;
   contentTitle.textContent = top.title;
   contentSub.textContent = top.sub || "";
   showError(appError, "");
-  setLoading(true);
-  listEl.innerHTML = "";
+  if (!skipLoading) {
+    setLoading(true);
+    listEl.innerHTML = "";
+  }
   let rows = [];
   try {
     rows = await top.load();
@@ -347,23 +373,73 @@ async function renderFrame() {
     showError(appError, (e && e.message) || String(e));
     rows = [];
   } finally {
-    setLoading(false);
+    if (!skipLoading) setLoading(false);
   }
   renderRows(rows);
 }
 
 function renderRows(rows) {
   listEl.innerHTML = "";
+  const isLiveHub = activeNav === "live" && stack.length === 1;
+  if (isLiveHub && liveHubFocusFirstChannelOnLoad) {
+    const firstCh = rows.findIndex((r) => r.kind === "live-channel");
+    if (firstCh >= 0) focusIndex = firstCh;
+    liveHubFocusFirstChannelOnLoad = false;
+  }
+  listEl.classList.toggle("content-list--live-hub", isLiveHub);
+  mainContent.classList.toggle("main-content--live-hub", isLiveHub);
+  let liveCatsWrap = null;
+  let liveChannelsWrap = null;
+  if (isLiveHub) {
+    liveCatsWrap = document.createElement("div");
+    liveCatsWrap.className = "live-hub-categories";
+    liveChannelsWrap = document.createElement("div");
+    liveChannelsWrap.className = "live-hub-channels";
+    listEl.append(liveCatsWrap, liveChannelsWrap);
+  }
   rows.forEach((row, i) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "content-list__item";
     if (row.vodRating) b.classList.add("content-list__item--vod-rating");
+    if (row.kind) b.classList.add(`content-list__item--${row.kind}`);
+    if (row.selected) b.classList.add("content-list__item--selected");
     if (i === focusIndex && focusZone === "content")
       b.classList.add("content-list__item--focus");
-    b.innerHTML = row.detail
-      ? `<span class="content-list__item-text">${escapeHtml(row.text)}</span><span class="content-list__item-detail">${escapeHtml(row.detail)}</span>`
-      : `<span class="content-list__item-text">${escapeHtml(row.text)}</span>`;
+    if (row.kind === "live-category" && row.categoryId) {
+      b.dataset.liveCategoryId = row.categoryId;
+    }
+    if (row.kind === "live-channel") {
+      b.dataset.liveIconUrl = row.iconUrl ? String(row.iconUrl) : "";
+      const logo = document.createElement("div");
+      logo.className = "content-list__item-live-logo";
+      if (row.iconUrl) {
+        logo.style.backgroundImage = `url("${String(row.iconUrl).replace(/"/g, "%22")}")`;
+      } else {
+        logo.textContent = row.text.slice(0, 2).toUpperCase();
+      }
+
+      const textWrap = document.createElement("div");
+      textWrap.className = "content-list__item-live-text";
+
+      const title = document.createElement("span");
+      title.className = "content-list__item-text";
+      title.textContent = row.text;
+      textWrap.appendChild(title);
+
+      if (row.detail) {
+        const detail = document.createElement("span");
+        detail.className = "content-list__item-detail";
+        detail.textContent = row.detail;
+        textWrap.appendChild(detail);
+      }
+
+      b.append(logo, textWrap);
+    } else {
+      b.innerHTML = row.detail
+        ? `<span class="content-list__item-text">${escapeHtml(row.text)}</span><span class="content-list__item-detail">${escapeHtml(row.detail)}</span>`
+        : `<span class="content-list__item-text">${escapeHtml(row.text)}</span>`;
+    }
     b.addEventListener("click", () => {
       focusIndex = i;
       focusZone = "content";
@@ -371,7 +447,13 @@ function renderRows(rows) {
       syncListFocusClasses();
       row.onSelect();
     });
-    listEl.appendChild(b);
+    if (isLiveHub && row.kind === "live-category" && liveCatsWrap) {
+      liveCatsWrap.appendChild(b);
+    } else if (isLiveHub && liveChannelsWrap) {
+      liveChannelsWrap.appendChild(b);
+    } else {
+      listEl.appendChild(b);
+    }
   });
   if (!rows.length) {
     const p = document.createElement("p");
@@ -379,12 +461,102 @@ function renderRows(rows) {
     p.textContent = t("list_empty");
     listEl.appendChild(p);
   }
+  if (isLiveHub) updateLiveHubPreview();
+}
+
+/**
+ * Channel tile used for the live-hub preview: focused grid channel when focus is on
+ * the channel grid; otherwise the first channel in the current category (e.g. sidebar
+ * or category row focused).
+ * @returns {HTMLElement | null}
+ */
+function getLiveHubPreviewChannelEl() {
+  const items = listEl.querySelectorAll(".content-list__item");
+  const el = items[focusIndex];
+  if (
+    focusZone === "content" &&
+    el?.classList.contains("content-list__item--live-channel")
+  ) {
+    return el;
+  }
+  return listEl.querySelector(
+    ".live-hub-channels .content-list__item--live-channel",
+  );
+}
+
+function updateLiveHubPreview() {
+  if (!liveHubPreview || !liveHubPreviewImg) return;
+  if (!isLiveHubActive()) {
+    liveHubPreview.hidden = true;
+    liveHubPreview.classList.remove("live-hub-preview--has-thumb");
+    liveHubPreviewImg.removeAttribute("src");
+    liveHubPreviewImg.alt = "";
+    liveHubPreviewImg.onload = null;
+    liveHubPreviewImg.onerror = null;
+    return;
+  }
+  liveHubPreview.hidden = false;
+  const el = getLiveHubPreviewChannelEl();
+  const url = (el?.dataset?.liveIconUrl || "").trim();
+  if (
+    el?.classList.contains("content-list__item--live-channel") &&
+    url.length
+  ) {
+    liveHubPreview.classList.remove("live-hub-preview--has-thumb");
+    liveHubPreviewImg.alt =
+      el.querySelector(".content-list__item-text")?.textContent?.trim() || "";
+    liveHubPreviewImg.onload = () => {
+      liveHubPreview.classList.add("live-hub-preview--has-thumb");
+    };
+    liveHubPreviewImg.onerror = () => {
+      liveHubPreview.classList.remove("live-hub-preview--has-thumb");
+      liveHubPreviewImg.removeAttribute("src");
+    };
+    liveHubPreviewImg.src = url;
+    if (liveHubPreviewImg.complete && liveHubPreviewImg.naturalWidth > 0) {
+      liveHubPreview.classList.add("live-hub-preview--has-thumb");
+    }
+  } else {
+    liveHubPreview.classList.remove("live-hub-preview--has-thumb");
+    liveHubPreviewImg.removeAttribute("src");
+    liveHubPreviewImg.alt = "";
+    liveHubPreviewImg.onload = null;
+    liveHubPreviewImg.onerror = null;
+  }
+}
+
+function queueLiveHubCategorySyncFromFocus() {
+  if (!isLiveHubActive()) return;
+  const items = listEl.querySelectorAll(".content-list__item");
+  const el = items[focusIndex];
+  if (!el?.classList.contains("content-list__item--live-category")) return;
+  clearTimeout(liveHubCategoryFocusTimer);
+  liveHubCategoryFocusTimer = window.setTimeout(() => {
+    void applyLiveHubCategoryFromFocusIfNeeded();
+  }, 120);
+}
+
+async function applyLiveHubCategoryFromFocusIfNeeded() {
+  if (!isLiveHubActive()) return;
+  const items = listEl.querySelectorAll(".content-list__item");
+  const el = items[focusIndex];
+  if (!el?.classList.contains("content-list__item--live-category")) return;
+  const cid = el.dataset.liveCategoryId;
+  if (!cid || cid === liveHubCategoryId) return;
+  liveHubCategoryId = cid;
+  await renderFrame({ skipLoading: true });
 }
 
 function syncListFocusClasses() {
   listEl.querySelectorAll(".content-list__item").forEach((el, i) => {
     el.classList.toggle("content-list__item--focus", i === focusIndex);
   });
+  queueLiveHubCategorySyncFromFocus();
+  updateLiveHubPreview();
+}
+
+function isLiveHubActive() {
+  return activeNav === "live" && stack.length === 1;
 }
 
 function escapeHtml(s) {
@@ -404,11 +576,201 @@ function moveListFocus(delta) {
   items[focusIndex]?.scrollIntoView({ block: "nearest" });
 }
 
+/**
+ * When focus is on a category pill, move only along the category row (left/right).
+ * @param {number} delta -1 = previous category, +1 = next
+ * @returns {"moved" | "at-first" | "at-last" | "not-category"}
+ */
+function moveLiveHubCategoryHorizontal(delta) {
+  const items = Array.from(listEl.querySelectorAll(".content-list__item"));
+  if (!items.length) return "not-category";
+  if (focusIndex < 0 || focusIndex >= items.length) focusIndex = 0;
+
+  const activeEl = items[focusIndex];
+  if (!activeEl?.classList.contains("content-list__item--live-category")) {
+    return "not-category";
+  }
+
+  const catIndices = items
+    .map((el, i) =>
+      el.classList.contains("content-list__item--live-category") ? i : -1,
+    )
+    .filter((i) => i >= 0);
+  const pos = catIndices.indexOf(focusIndex);
+  if (pos < 0) return "not-category";
+
+  const nextPos = pos + delta;
+  if (nextPos < 0) return "at-first";
+  if (nextPos >= catIndices.length) {
+    if (delta > 0) {
+      const firstCh = items.findIndex((el) =>
+        el.classList.contains("content-list__item--live-channel"),
+      );
+      if (firstCh >= 0) {
+        focusIndex = firstCh;
+        syncListFocusClasses();
+        items[focusIndex]?.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+        });
+        return "moved";
+      }
+    }
+    return "at-last";
+  }
+
+  focusIndex = catIndices[nextPos];
+  syncListFocusClasses();
+  items[focusIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  return "moved";
+}
+
+/**
+ * Spatial move among a subset of indices only (e.g. channel grid).
+ * @param {HTMLElement[]} items
+ * @param {number} fromIndex
+ * @param {"left" | "right" | "up" | "down"} direction
+ * @param {number[]} allowedTargets candidate indices (must include only valid targets)
+ */
+function findBestSpatialTarget(items, fromIndex, direction, allowedTargets) {
+  const allow = new Set(allowedTargets);
+  const activeEl = items[fromIndex];
+  const a = activeEl.getBoundingClientRect();
+  const ax = a.left + a.width / 2;
+  const ay = a.top + a.height / 2;
+  let bestIndex = -1;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < items.length; i += 1) {
+    if (i === fromIndex || !allow.has(i)) continue;
+    const r = items[i].getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const y = r.top + r.height / 2;
+    const dx = x - ax;
+    const dy = y - ay;
+    if (direction === "left" && dx >= -2) continue;
+    if (direction === "right" && dx <= 2) continue;
+    if (direction === "up" && dy >= -2) continue;
+    if (direction === "down" && dy <= 2) continue;
+    const primary =
+      direction === "left" || direction === "right" ? Math.abs(dx) : Math.abs(dy);
+    const secondary =
+      direction === "left" || direction === "right" ? Math.abs(dy) : Math.abs(dx);
+    const score = primary * 10 + secondary;
+    if (score < bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
+}
+
+function moveLiveHubFocus(direction) {
+  /** @type {HTMLElement[]} */
+  const items = Array.from(listEl.querySelectorAll(".content-list__item"));
+  if (!items.length) return false;
+  if (focusIndex < 0 || focusIndex >= items.length) focusIndex = 0;
+
+  const activeEl = items[focusIndex];
+  const catIndices = items
+    .map((el, i) =>
+      el.classList.contains("content-list__item--live-category") ? i : -1,
+    )
+    .filter((i) => i >= 0);
+  const chIndices = items
+    .map((el, i) =>
+      el.classList.contains("content-list__item--live-channel") ? i : -1,
+    )
+    .filter((i) => i >= 0);
+
+  /* Category row: left/right = linear; down = enter grid */
+  if (activeEl?.classList.contains("content-list__item--live-category")) {
+    if (direction === "left" || direction === "right") {
+      const d = direction === "left" ? -1 : 1;
+      const r = moveLiveHubCategoryHorizontal(d);
+      return r === "moved";
+    }
+    if (direction === "down" && chIndices.length) {
+      let best = findBestSpatialTarget(items, focusIndex, "down", chIndices);
+      if (best < 0) best = chIndices[0];
+      focusIndex = best;
+      syncListFocusClasses();
+      items[focusIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      return true;
+    }
+    return false;
+  }
+
+  /* Channel grid: move only between channels; top row + up → selected category */
+  if (activeEl?.classList.contains("content-list__item--live-channel")) {
+    if (!chIndices.length) return false;
+    const best = findBestSpatialTarget(items, focusIndex, direction, chIndices);
+    if (best >= 0) {
+      focusIndex = best;
+      syncListFocusClasses();
+      items[focusIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      return true;
+    }
+    if (direction === "up") {
+      let catIdx = items.findIndex(
+        (el) =>
+          el.classList.contains("content-list__item--live-category") &&
+          el.classList.contains("content-list__item--selected"),
+      );
+      if (catIdx < 0 && catIndices.length) catIdx = catIndices[0];
+      if (catIdx >= 0) {
+        focusIndex = catIdx;
+        syncListFocusClasses();
+        items[focusIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  return false;
+}
+
 function activateListFocus() {
+  if (isLiveHubActive()) {
+    const items = listEl.querySelectorAll(".content-list__item");
+    const el = items[focusIndex];
+    if (el?.classList.contains("content-list__item--live-category")) {
+      clearTimeout(liveHubCategoryFocusTimer);
+      void applyLiveHubCategoryFromFocusIfNeeded();
+    }
+  }
   listEl.querySelectorAll(".content-list__item")[focusIndex]?.click();
 }
 
 /* ——— Sections ——— */
+
+function buildLiveHubRows() {
+  const cats = liveHubCache.getLiveHubCategories();
+  if (!cats.length) return [];
+  if (!liveHubCategoryId || !cats.some((c) => c.id === liveHubCategoryId)) {
+    liveHubCategoryId = cats[0].id;
+  }
+  const streams = liveHubCache.getLiveHubStreamsForCategory(liveHubCategoryId);
+  /** @type {Row[]} */
+  const rows = cats.map((c) => ({
+    text: c.name,
+    kind: "live-category",
+    categoryId: c.id,
+    selected: c.id === liveHubCategoryId,
+    onSelect: () => {},
+  }));
+  rows.push(
+    ...streams.map((s) => ({
+      text: s.name,
+      detail: s.tvArchive ? (lang() === "he" ? "ארכיון" : "Catch-up") : "",
+      kind: "live-channel",
+      iconUrl: s.iconUrl || "",
+      onSelect: () => openLiveChannelActions(s),
+    })),
+  );
+  return rows;
+}
+
 function startNoSessionHome() {
   log.warn("startNoSessionHome()");
   stack = [];
@@ -429,16 +791,15 @@ function startLive() {
     return;
   }
   stack = [];
+  liveHubCategoryId = null;
+  liveHubFocusFirstChannelOnLoad = true;
   setActiveNav("live");
   pushFrame({
-    title: lang() === "he" ? "טלוויזיה חיה" : "Live TV",
-    sub: lang() === "he" ? "קטגוריות" : "Categories",
+    title: lang() === "he" ? "שידור חי" : "Live Stream",
+    sub: lang() === "he" ? "בחרו קטגוריה וערוץ" : "Choose a category and channel",
     load: async () => {
-      const cats = await xlive.fetchLiveCategories();
-      return cats.map((c) => ({
-        text: c.name,
-        onSelect: () => openLiveCategory(c.id, c.name),
-      }));
+      await liveHubCache.ensureLiveHubCache();
+      return buildLiveHubRows();
     },
   });
 }
@@ -448,7 +809,11 @@ function openLiveCategory(categoryId, name) {
     title: name,
     sub: lang() === "he" ? "ערוצים" : "Channels",
     load: async () => {
-      const streams = await xlive.fetchLiveStreams(categoryId);
+      await liveHubCache.ensureLiveHubCache();
+      let streams = liveHubCache.getLiveHubStreamsForCategory(categoryId);
+      if (!streams.length) {
+        streams = await xlive.fetchLiveStreams(categoryId);
+      }
       return streams.map((s) => ({
         text: s.name,
         detail: s.tvArchive ? (lang() === "he" ? "ארכיון" : "Catch-up") : "",
@@ -1102,6 +1467,7 @@ function startProfile() {
         text: t("profile_logout"),
         onSelect: () => {
           cred.clearSession();
+          liveHubCache.clearLiveHubCache();
           stack = [];
           vodMenuOpen = false;
           syncVodSubmenu();
@@ -1358,18 +1724,41 @@ function bindKeys() {
 
     if (ev.key === "ArrowDown") {
       ev.preventDefault();
-      moveListFocus(1);
+      if (isLiveHubActive()) {
+        moveLiveHubFocus("down");
+      } else {
+        moveListFocus(1);
+      }
       return;
     }
     if (ev.key === "ArrowUp") {
       ev.preventDefault();
-      moveListFocus(-1);
+      if (isLiveHubActive()) {
+        moveLiveHubFocus("up");
+      } else {
+        moveListFocus(-1);
+      }
       return;
     }
     if (ev.key === "ArrowLeft") {
       ev.preventDefault();
-      setShellZone("sidebar");
-      applySidebarFocus();
+      if (isLiveHubActive()) {
+        const moved = moveLiveHubFocus("left");
+        if (!moved) {
+          setShellZone("sidebar");
+          applySidebarFocus();
+        }
+      } else {
+        setShellZone("sidebar");
+        applySidebarFocus();
+      }
+      return;
+    }
+    if (ev.key === "ArrowRight") {
+      if (isLiveHubActive()) {
+        ev.preventDefault();
+        moveLiveHubFocus("right");
+      }
       return;
     }
     if (ev.key === "Enter") {
