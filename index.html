@@ -1,11 +1,147 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title></title>
-    <link rel="stylesheet" type="text/css" href="css/style.css"/>
-    <script src="./main.js"></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+    <title>newtv</title>
+    <link rel="stylesheet" type="text/css" href="css/style.css" />
 </head>
 <body>
+    <!-- Sign-in UI temporarily disabled in JS (SKIP_SIGNIN); kept for easy restore -->
+    <div id="view-login" class="view view--login" hidden>
+        <div class="login-bg" aria-hidden="true"></div>
+        <div class="login-scrim" aria-hidden="true"></div>
+        <div class="login-frame">
+            <div class="login-flags">
+                <button type="button" id="login-lang-he" class="login-flag" title="Hebrew">עברית</button>
+                <button type="button" id="login-lang-en" class="login-flag login-flag--secondary" title="English">EN</button>
+            </div>
+            <div class="login-card">
+                <p id="login-hello" class="login-hello">Hello! Welcome to</p>
+                <div class="login-brand">
+                    <span class="login-brand__sdarot">SDAROT</span><span class="login-brand__tv">TV</span>
+                </div>
+                <p id="login-subtitle" class="login-subtitle">Please sign in to your account.</p>
 
+                <div class="login-field">
+                    <span class="login-field__icon login-field__icon--link" aria-hidden="true"></span>
+                    <input id="login-base" class="login-field__input" type="url" inputmode="url" autocomplete="off" placeholder="Panel URL" />
+                </div>
+                <div class="login-field">
+                    <span class="login-field__icon login-field__icon--user" aria-hidden="true"></span>
+                    <input id="login-user" class="login-field__input" type="text" autocomplete="username" placeholder="Username" />
+                </div>
+                <div class="login-field">
+                    <span class="login-field__icon login-field__icon--lock" aria-hidden="true"></span>
+                    <input id="login-pass" class="login-field__input" type="password" autocomplete="current-password" placeholder="Password" />
+                </div>
+
+                <p id="login-error" class="login-error" hidden></p>
+                <div id="login-progress" class="login-progress" hidden></div>
+
+                <button type="button" id="login-btn" class="login-btn login-btn--primary">Login</button>
+                <button type="button" id="login-qr" class="login-btn">Login with QR code</button>
+            </div>
+            <div class="login-footer">
+                <button type="button" id="login-reset" class="login-btn login-btn--small">Reset password</button>
+                <p id="login-build" class="login-build"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main: activity_main — content gutter + overlapping sidebar -->
+    <div id="view-app" class="view view--app">
+        <div id="shell" class="shell shell--sidebar-focused">
+            <main id="main-content" class="main-content" aria-label="Content">
+                <header class="main-content__header">
+                    <h2 id="content-title" class="main-content__title"></h2>
+                    <p id="content-sub" class="main-content__sub"></p>
+                </header>
+                <p id="app-error" class="banner banner--error" hidden></p>
+                <p id="app-loading" class="banner banner--loading" hidden>Loading…</p>
+                <div id="list" class="content-list" role="listbox"></div>
+            </main>
+
+            <aside id="iptv-sidebar" class="iptv-sidebar" aria-label="Navigation">
+                <div class="iptv-sidebar__inner">
+                    <div class="sidebar-logo-row">
+                        <span class="sidebar-logo-row__text">SDAROT</span>
+                        <div class="sidebar-logo-row__slot">
+                            <img class="sidebar-logo-row__img" src="sdarotv_logo.png" alt="" />
+                        </div>
+                    </div>
+
+                    <button type="button" class="sidebar-row sidebar-row--profile" data-sidebar-focus data-nav="profile">
+                        <span class="sidebar-avatar" id="sidebar-avatar-initial">?</span>
+                        <span class="sidebar-row__label sidebar-row__label--profile" id="sidebar-profile-name">ACCOUNT</span>
+                    </button>
+
+                    <button type="button" class="sidebar-row" data-sidebar-focus data-nav="search">
+                        <span class="sidebar-row__icon" data-icon="search"></span>
+                        <span class="sidebar-row__label" data-i18n="search">SEARCH</span>
+                    </button>
+                    <button type="button" class="sidebar-row" data-sidebar-focus data-nav="favorites">
+                        <span class="sidebar-row__icon" data-icon="heart"></span>
+                        <span class="sidebar-row__label" data-i18n="favorites">FAVORITES</span>
+                    </button>
+                    <button type="button" class="sidebar-row" data-sidebar-focus data-nav="lastwatch">
+                        <span class="sidebar-row__icon" data-icon="history"></span>
+                        <span class="sidebar-row__label" data-i18n="lastwatch">LAST WATCH</span>
+                    </button>
+                    <button type="button" class="sidebar-row" data-sidebar-focus data-nav="tvguide">
+                        <span class="sidebar-row__icon" data-icon="guide"></span>
+                        <span class="sidebar-row__label" data-i18n="tvguide">TV GUIDE</span>
+                    </button>
+
+                    <button type="button" class="sidebar-row sidebar-row--live" data-sidebar-focus data-nav="live">
+                        <span class="live-chip">LIVE</span>
+                        <span class="sidebar-row__label" data-i18n="live">LIVE</span>
+                    </button>
+
+                    <button type="button" class="sidebar-row" data-sidebar-focus data-nav="records">
+                        <span class="sidebar-row__icon" data-icon="records"></span>
+                        <span class="sidebar-row__label" data-i18n="records">RECORDS</span>
+                    </button>
+
+                    <button type="button" class="sidebar-row sidebar-row--vod" data-sidebar-focus data-nav="vod" id="row-vod">
+                        <span class="sidebar-row__icon" data-icon="vod"></span>
+                        <span class="sidebar-row__label" data-i18n="vod">VOD</span>
+                        <span class="sidebar-row__chevron" aria-hidden="true"></span>
+                    </button>
+                    <div id="sidebar-vod-submenu" class="sidebar-vod-submenu" hidden>
+                        <button type="button" class="sidebar-row sidebar-row--sub" data-sidebar-focus data-nav="vod-series">
+                            <span class="sidebar-row__label" data-i18n="vod_series">SERIES</span>
+                        </button>
+                        <button type="button" class="sidebar-row sidebar-row--sub" data-sidebar-focus data-nav="vod-movies">
+                            <span class="sidebar-row__label" data-i18n="vod_movies">MOVIES</span>
+                        </button>
+                    </div>
+
+                    <div class="sidebar-spacer" aria-hidden="true"></div>
+
+                    <button type="button" class="sidebar-row" data-sidebar-focus data-nav="settings">
+                        <span class="sidebar-row__icon" data-icon="settings"></span>
+                        <span class="sidebar-row__label" data-i18n="settings">SETTINGS</span>
+                    </button>
+
+                    <div class="sidebar-footer">
+                        <span id="sidebar-clock" class="sidebar-clock"></span>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <div id="view-player" class="view view--player" hidden>
+        <video id="video" class="video" playsinline></video>
+        <div class="player-hud">
+            <p id="player-title" class="player-hud__title"></p>
+            <p id="player-error" class="banner banner--error" hidden></p>
+            <p class="player-hud__hint">BACK to stop</p>
+        </div>
+    </div>
+
+    <script src="vendor/hls.min.js"></script>
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>

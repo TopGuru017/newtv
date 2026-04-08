@@ -30,7 +30,19 @@ files:
   - css/style.css
   - icon.png
   - index.html
-  - main.js
+  - sdarot_icon.png
+  - sdarotv_logo.png
+  - vendor/hls.min.js
+  - js/app.js
+  - js/iptv/credentials.js
+  - js/iptv/parse.js
+  - js/iptv/timeUtils.js
+  - js/iptv/streamUrls.js
+  - js/iptv/xapi.js
+  - js/iptv/xauth.js
+  - js/iptv/xlive.js
+  - js/iptv/xvod.js
+  - js/player/iptvPlayer.js
 
 # list of files to exclude based on the matched patterns
 excludes:
@@ -56,4 +68,6 @@ excludes:
 
 # project dependencies
 deps: []
+
+
 
