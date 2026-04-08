@@ -18,17 +18,17 @@
   --sidebar-width-collapsed: clamp(72px, 4vw, 108px);
   --content-gutter: var(--sidebar-width-collapsed);
 
-  --sidebar-row-h: clamp(40px, 3.2vh, 58px);
+  --sidebar-row-h: clamp(44px, 3.6vh, 64px);
   --sidebar-pad-x: clamp(10px, 0.9vw, 18px);
   --sidebar-icon: clamp(20px, 1.4vw, 30px);
   --sidebar-icon-gap: clamp(8px, 0.7vw, 14px);
   --sidebar-sub-pad: clamp(32px, 2.6vw, 52px);
 
-  --sidebar-font-label: clamp(11px, 0.78vw, 15px);
-  --sidebar-font-brand: clamp(14px, 1.05vw, 20px);
-  --sidebar-font-profile: clamp(10px, 0.72vw, 13px);
-  --sidebar-font-clock: clamp(10px, 0.72vw, 13px);
-  --sidebar-logo-slot-h: clamp(30px, 2.4vh, 46px);
+  --sidebar-font-label: clamp(13px, 1.02vw, 20px);
+  --sidebar-font-brand: clamp(16px, 1.25vw, 24px);
+  --sidebar-font-profile: clamp(12px, 0.92vw, 16px);
+  --sidebar-font-clock: clamp(12px, 0.88vw, 16px);
+  --sidebar-logo-slot-h: clamp(34px, 2.8vh, 52px);
   --sidebar-focus-bar: clamp(3px, 0.28vw, 5px);
   --sidebar-avatar-size: clamp(28px, 2vw, 40px);
 }
@@ -43,6 +43,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  font-size: clamp(16px, 1vw, 28px);
   font-family: system-ui, "Segoe UI", "Roboto", sans-serif;
   background: #000;
   color: var(--sidebar-text-primary);
@@ -83,23 +84,24 @@ button {
   position: relative;
   z-index: 1;
   height: 100%;
-  padding: 36px 48px 20px;
+  padding: clamp(16px, 3.3vh, 40px) clamp(18px, 2.5vw, 56px)
+    clamp(12px, 1.9vh, 24px);
   display: flex;
   flex-direction: column;
 }
 
 .login-flags {
   display: flex;
-  gap: 16px;
+  gap: clamp(10px, 0.9vw, 20px);
 }
 
 .login-flag {
-  width: 56px;
-  height: 56px;
+  width: clamp(40px, 3.4vw, 68px);
+  height: clamp(40px, 3.4vw, 68px);
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.35);
   background: rgba(0, 0, 0, 0.35);
-  font-size: 11px;
+  font-size: clamp(10px, 0.72vw, 14px);
   font-weight: 700;
   color: #fff;
 }
@@ -116,15 +118,15 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  max-width: 460px;
-  min-width: min(360px, 100%);
+  max-width: clamp(390px, 36vw, 760px);
+  min-width: min(clamp(300px, 28vw, 560px), 100%);
   margin: 0 auto;
   width: 100%;
 }
 
 .login-hello {
   margin: 0;
-  font-size: 20px;
+  font-size: clamp(16px, 1.3vw, 30px);
   color: #fff;
 }
 
@@ -134,21 +136,21 @@ button {
 }
 
 .login-brand__sdarot {
-  font-size: 34px;
+  font-size: clamp(28px, 2.3vw, 54px);
   font-weight: 700;
   color: #fff;
 }
 
 .login-brand__tv {
-  font-size: 34px;
+  font-size: clamp(28px, 2.3vw, 54px);
   font-weight: 700;
   color: var(--sidebar-accent-cyan);
-  margin-left: 6px;
+  margin-left: clamp(5px, 0.45vw, 10px);
 }
 
 .login-subtitle {
-  margin: 10px 0 0;
-  font-size: 15px;
+  margin: clamp(8px, 1vh, 14px) 0 0;
+  font-size: clamp(12px, 0.95vw, 20px);
   color: rgba(255, 255, 255, 0.8);
 }
 
@@ -156,16 +158,16 @@ button {
   display: flex;
   align-items: center;
   width: 100%;
-  height: 52px;
-  margin-top: 14px;
-  padding: 0 16px;
-  border-radius: 14px;
+  height: clamp(44px, 4.8vh, 72px);
+  margin-top: clamp(10px, 1.3vh, 18px);
+  padding: 0 clamp(12px, 1.1vw, 22px);
+  border-radius: clamp(12px, 1vw, 18px);
   background: rgba(26, 26, 26, 0.6);
   border: 1px solid #444;
 }
 
 .login-field:first-of-type {
-  margin-top: 24px;
+  margin-top: clamp(16px, 2.5vh, 30px);
 }
 
 .login-field:focus-within {
@@ -176,9 +178,9 @@ button {
 
 .login-field__icon {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  margin-right: 12px;
+  width: clamp(18px, 1.45vw, 30px);
+  height: clamp(18px, 1.45vw, 30px);
+  margin-right: clamp(8px, 0.8vw, 14px);
   opacity: 0.95;
   background: currentColor;
   -webkit-mask: no-repeat center / contain;
@@ -206,7 +208,7 @@ button {
   border: none;
   background: transparent;
   color: #fff;
-  font-size: 16px;
+  font-size: clamp(14px, 1.02vw, 22px);
   outline: none;
 }
 
@@ -215,17 +217,17 @@ button {
 }
 
 .login-error {
-  margin: 10px 0 0;
+  margin: clamp(8px, 1vh, 14px) 0 0;
   width: 100%;
   text-align: center;
   color: #ff8a80;
-  font-size: 14px;
+  font-size: clamp(12px, 0.85vw, 18px);
 }
 
 .login-progress {
-  margin-top: 16px;
-  width: 32px;
-  height: 32px;
+  margin-top: clamp(10px, 1.4vh, 18px);
+  width: clamp(26px, 2.3vw, 44px);
+  height: clamp(26px, 2.3vw, 44px);
   border: 3px solid rgba(0, 188, 212, 0.25);
   border-top-color: var(--sidebar-accent-cyan);
   border-radius: 50%;
@@ -240,21 +242,21 @@ button {
 
 .login-btn {
   width: 100%;
-  height: 52px;
-  margin-top: 12px;
-  border-radius: 14px;
+  height: clamp(44px, 4.8vh, 72px);
+  margin-top: clamp(8px, 1.2vh, 16px);
+  border-radius: clamp(12px, 1vw, 18px);
   background: rgba(26, 26, 26, 0.6);
   border: 1px solid var(--sidebar-accent-cyan);
   color: #fff;
-  font-size: 16px;
+  font-size: clamp(14px, 1.02vw, 22px);
 }
 
 .login-btn:first-of-type {
-  margin-top: 12px;
+  margin-top: clamp(8px, 1.2vh, 16px);
 }
 
 .login-btn--primary {
-  margin-top: 12px;
+  margin-top: clamp(8px, 1.2vh, 16px);
 }
 
 .login-btn:focus {
@@ -270,10 +272,10 @@ button {
 
 .login-btn--small {
   width: auto;
-  min-height: 44px;
+  min-height: clamp(38px, 3.8vh, 56px);
   height: auto;
-  padding: 10px 20px;
-  font-size: 14px;
+  padding: clamp(8px, 0.8vh, 12px) clamp(14px, 1.2vw, 26px);
+  font-size: clamp(12px, 0.84vw, 16px);
 }
 
 .login-footer {
@@ -281,14 +283,14 @@ button {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 8px;
+  gap: clamp(6px, 0.8vh, 12px);
   margin-top: auto;
-  padding-bottom: 8px;
+  padding-bottom: clamp(6px, 0.8vh, 12px);
 }
 
 .login-build {
   margin: 0;
-  font-size: 11px;
+  font-size: clamp(10px, 0.72vw, 14px);
   color: rgba(255, 255, 255, 0.6);
 }
 
@@ -332,7 +334,8 @@ button {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: clamp(10px, 1.2vh, 18px) 0 clamp(8px, 1vh, 14px);
+  padding: clamp(14px, 1.8vh, 26px) clamp(6px, 0.7vw, 12px)
+    clamp(14px, 1.6vh, 24px);
   display: flex;
   flex-direction: column;
 }
@@ -340,11 +343,15 @@ button {
 .sidebar-logo-row {
   display: flex;
   align-items: center;
-  padding: 0 var(--sidebar-pad-x) clamp(8px, 1vh, 14px);
-  gap: clamp(4px, 0.35vw, 8px);
+  justify-content: flex-start;
+  min-height: var(--sidebar-row-h);
+  padding: 0 var(--sidebar-pad-x) clamp(32px, 4.2vh, 58px);
+  gap: var(--sidebar-icon-gap);
 }
 
 .sidebar-logo-row__text {
+  order: 1;
+  margin-left: var(--sidebar-icon-gap);
   font-size: var(--sidebar-font-brand);
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -360,23 +367,27 @@ button {
 }
 
 .sidebar-logo-row__slot {
-  flex: 1;
-  height: var(--sidebar-logo-slot-h);
-  min-width: clamp(48px, 4vw, 72px);
+  order: 0;
+  flex: 0 0 auto;
+  height: var(--sidebar-icon);
+  width: var(--sidebar-icon);
+  min-width: var(--sidebar-icon);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .sidebar-logo-row__img {
-  max-height: 100%;
-  max-width: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+  object-position: center;
 }
 
 .sidebar-row {
   display: flex;
   align-items: center;
+  gap: var(--sidebar-icon-gap);
   width: 100%;
   min-height: var(--sidebar-row-h);
   padding: 0 var(--sidebar-pad-x);
@@ -385,8 +396,13 @@ button {
   position: relative;
 }
 
+.sidebar-row + .sidebar-row {
+  margin-top: clamp(2px, 0.35vh, 6px);
+}
+
 .sidebar-row--profile {
   gap: var(--sidebar-icon-gap);
+  margin-bottom: clamp(28px, 3.6vh, 54px);
 }
 
 .sidebar-avatar {
@@ -419,7 +435,7 @@ button {
 
 .sidebar-row__label {
   flex: 1;
-  margin-left: var(--sidebar-icon-gap);
+  margin-left: 0;
   font-size: var(--sidebar-font-label);
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -467,16 +483,17 @@ button {
   line-height: 1.1;
 }
 
-.shell--content-focused .live-chip {
-  opacity: 0;
-  width: 0;
-  padding: 0;
-  border: none;
-  overflow: hidden;
+.sidebar-row--live .sidebar-row__label {
+  margin-left: 0;
 }
 
-.sidebar-row--live .sidebar-row__label {
-  margin-left: var(--sidebar-icon-gap);
+/* Keep LIVE icon consistent in expanded and collapsed rails. */
+.sidebar-row--live .sidebar-row__icon {
+  display: block;
+}
+
+.sidebar-row--live .live-chip {
+  display: none;
 }
 
 .sidebar-row__chevron {
@@ -499,7 +516,8 @@ button {
 }
 
 .sidebar-vod-submenu {
-  margin-bottom: 8px;
+  margin-top: clamp(2px, 0.4vh, 6px);
+  margin-bottom: clamp(8px, 1.1vh, 16px);
 }
 
 .sidebar-row--sub {
@@ -523,7 +541,7 @@ button {
 }
 
 .sidebar-footer {
-  padding: clamp(6px, 0.8vh, 12px) var(--sidebar-pad-x) 0;
+  padding: clamp(8px, 1.1vh, 16px) var(--sidebar-pad-x) 0;
 }
 
 .sidebar-clock {
@@ -538,7 +556,7 @@ button {
 
 .main-content__header {
   flex-shrink: 0;
-  margin-bottom: 12px;
+  margin-bottom: clamp(8px, 1vh, 16px);
 }
 
 .main-content__title {
@@ -550,15 +568,15 @@ button {
 
 .main-content__sub {
   margin: 6px 0 0;
-  font-size: clamp(0.9rem, 0.75vw + 0.55rem, 1.2rem);
+  font-size: clamp(1rem, 0.95vw + 0.55rem, 1.45rem);
   color: var(--sidebar-text-muted);
   line-height: 1.4;
   max-width: 85ch;
 }
 
 .banner {
-  margin: 0 0 8px;
-  font-size: 0.95rem;
+  margin: 0 0 clamp(6px, 0.8vh, 12px);
+  font-size: clamp(0.95rem, 0.58vw + 0.74rem, 1.25rem);
 }
 
 .banner--error {
@@ -575,7 +593,7 @@ button {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: clamp(6px, 0.85vh, 12px);
 }
 
 .content-list__item {
@@ -600,12 +618,12 @@ button {
 }
 
 .content-list__item-text {
-  font-size: clamp(0.95rem, 0.65vw + 0.75rem, 1.2rem);
+  font-size: clamp(1.05rem, 0.85vw + 0.74rem, 1.45rem);
   font-weight: 600;
 }
 
 .content-list__item-detail {
-  font-size: clamp(0.8rem, 0.45vw + 0.65rem, 1rem);
+  font-size: clamp(0.9rem, 0.55vw + 0.64rem, 1.2rem);
   color: var(--sidebar-text-muted);
   line-height: 1.35;
 }
@@ -616,7 +634,7 @@ button {
 
 .list__empty {
   color: var(--sidebar-text-muted);
-  margin: 16px 0;
+  margin: clamp(10px, 1.2vh, 22px) 0;
 }
 
 /* Player */
@@ -638,21 +656,45 @@ button {
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 16px 24px 20px;
+  padding: clamp(10px, 1.4vh, 20px) clamp(14px, 1.5vw, 36px)
+    clamp(12px, 1.8vh, 26px);
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.88));
   pointer-events: none;
 }
 
 .player-hud__title {
-  margin: 0 0 6px;
-  font-size: 1.15rem;
+  margin: 0 0 clamp(4px, 0.6vh, 10px);
+  font-size: clamp(1rem, 0.78vw + 0.7rem, 1.45rem);
   font-weight: 700;
   text-shadow: 0 1px 4px #000;
 }
 
 .player-hud__hint {
-  margin: 8px 0 0;
-  font-size: 0.9rem;
+  margin: clamp(6px, 0.8vh, 12px) 0 0;
+  font-size: clamp(0.78rem, 0.35vw + 0.68rem, 1rem);
   color: #b0b0b0;
   text-shadow: 0 1px 3px #000;
+}
+
+/* 720p-friendly compact profile */
+@media (max-width: 1366px), (max-height: 760px) {
+  :root {
+    --sidebar-width-expanded: clamp(200px, 14.5vw, 270px);
+    --sidebar-width-collapsed: clamp(66px, 5.4vw, 86px);
+    --sidebar-row-h: clamp(40px, 4.6vh, 50px);
+    --sidebar-icon: clamp(20px, 2vw, 24px);
+    --sidebar-font-label: clamp(12px, 1.1vw, 15px);
+  }
+}
+
+/* 4K room-distance profile */
+@media (min-width: 3000px) and (min-height: 1600px) {
+  :root {
+    --sidebar-width-expanded: clamp(280px, 10.8vw, 460px);
+    --sidebar-width-collapsed: clamp(92px, 3.8vw, 132px);
+    --sidebar-row-h: clamp(58px, 3.4vh, 80px);
+    --sidebar-icon: clamp(26px, 1.2vw, 34px);
+    --sidebar-font-label: clamp(17px, 0.72vw, 24px);
+    --sidebar-font-brand: clamp(20px, 0.85vw, 28px);
+  }
 }
