@@ -775,8 +775,6 @@ function startNoSessionHome() {
   log.warn("startNoSessionHome()");
   stack = [];
   setActiveNav("live");
-  $("sidebar-profile-name").textContent = t("profile_title").toUpperCase();
-  $("sidebar-avatar-initial").textContent = "?";
   pushFrame({
     title: t("signin_disabled_title"),
     sub: t("signin_disabled_sub"),
@@ -1458,7 +1456,6 @@ function startProfile() {
   stack = [];
   setActiveNav("profile");
   const name = cred.usernameRaw().trim() || t("profile_title");
-  $("sidebar-avatar-initial").textContent = name.charAt(0).toUpperCase() || "?";
   pushFrame({
     title: t("profile_title"),
     sub: name,
@@ -1638,8 +1635,6 @@ function bindLogin() {
     try {
       await verify(b, u, p);
       cred.saveSession(b, u, p);
-      $("sidebar-profile-name").textContent = u.toUpperCase();
-      $("sidebar-avatar-initial").textContent = u.charAt(0).toUpperCase() || "?";
       showView("app");
       vodMenuOpen = false;
       syncVodSubmenu();
@@ -1801,9 +1796,6 @@ function boot() {
   syncVodSubmenu();
 
   if (cred.isLoggedIn()) {
-    const u = cred.usernameRaw();
-    $("sidebar-profile-name").textContent = u.toUpperCase();
-    $("sidebar-avatar-initial").textContent = u.charAt(0).toUpperCase() || "?";
     startLive();
     setShellZone(settings.sidebarCollapsedByDefault ? "content" : "sidebar");
     focusIndex = 0;
