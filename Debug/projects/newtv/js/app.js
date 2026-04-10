@@ -18,7 +18,21 @@ import { createLogger } from "./debug/logger.js";
 /** Set to `false` to show the sign-in screen again. */
 const SKIP_SIGNIN = true;
 
-/** @typedef {{ text: string, detail?: string, onSelect: () => void | Promise<void>, vodRating?: boolean, kind?: string, selected?: boolean, iconUrl?: string, categoryId?: string }} Row */
+/**
+ * @typedef {{
+ *   text: string,
+ *   detail?: string,
+ *   onSelect: () => void | Promise<void>,
+ *   vodRating?: boolean,
+ *   kind?: string,
+ *   selected?: boolean,
+ *   iconUrl?: string,
+ *   categoryId?: string,
+ *   streamId?: string,
+ *   tmdbRatingDisplay?: string,
+ *   progress?: number,
+ * }} Row
+ */
 
 const $ = (id) => document.getElementById(id);
 const log = createLogger("app");
@@ -69,6 +83,9 @@ const STR = {
     profile_title: "Profile",
     profile_logout: "Log out",
     list_empty: "Nothing here.",
+    series_label: "Series",
+    series_sort_aria: "Reverse episode order",
+    series_fav_aria: "Toggle favorite",
     signin_disabled_title: "newtv",
     signin_disabled_sub:
       "Sign-in screen is off for now. Set localStorage keys iptv_base_url, iptv_username, iptv_password (and reload), or set SKIP_SIGNIN = false in app.js to bring the form back.",
@@ -116,11 +133,16 @@ const STR = {
     profile_title: "פרופיל",
     profile_logout: "התנתקות",
     list_empty: "אין כאן פריטים.",
+    series_label: "סדרות",
+    series_sort_aria: "הפוך סדר פרקים",
+    series_fav_aria: "הוסף או הסר ממועדפים",
     signin_disabled_title: "newtv",
     signin_disabled_sub:
       "מסך ההתחברות כבוי זמנית. הגדירו ב-localStorage: iptv_base_url, iptv_username, iptv_password (ורעננו), או החזירו את מסך ההתחברות עם SKIP_SIGNIN = false ב-app.js.",
   },
 };
+
+const SERIES_SORT_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 4v16M7 4l3 3M7 4L4 7"/><path d="M17 20V4m0 16l3-3m-3 3l-3-3"/></svg>`;
 
 const ICONS = {
   search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`,
@@ -130,7 +152,8 @@ const ICONS = {
   live: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M5 12a7 7 0 0 1 14 0"/><path d="M2 12a10 10 0 0 1 20 0"/></svg>`,
   records: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h4M6 14h8"/></svg>`,
   vod: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>`,
-  settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`,
+  /* Heroicons solid cog-6-tooth (MIT) — filled 6-tooth gear */
+  settings: `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.493 7.493 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z"/></svg>`,
 };
 
 const viewLogin = $("view-login");
@@ -142,6 +165,15 @@ const listEl = $("list");
 const mainContent = $("main-content");
 const liveHubPreview = $("live-hub-preview");
 const liveHubPreviewImg = /** @type {HTMLImageElement | null} */ ($("live-hub-preview-img"));
+const liveHubPreviewFallback = $("live-hub-preview-fallback");
+const liveHubKicker = $("live-hub-kicker");
+const liveHubHeadline = $("live-hub-headline");
+const liveHubMeta = $("live-hub-meta");
+const liveHubTmdb = $("live-hub-tmdb");
+const liveHubVodBg = $("live-hub-vod-bg");
+const liveHubDesc = $("live-hub-desc");
+const liveHubDuration = /** @type {HTMLParagraphElement | null} */ ($("live-hub-duration"));
+const mainContentHeadings = $("main-content-headings");
 const contentTitle = $("content-title");
 const contentSub = $("content-sub");
 const appError = $("app-error");
@@ -152,9 +184,47 @@ const playerTitle = $("player-title");
 const playerError = $("player-error");
 const sidebarVodSub = $("sidebar-vod-submenu");
 const rowVod = $("row-vod");
+const seriesDetailPanel = $("series-detail-panel");
+const seriesDetailBg = $("series-detail-bg");
+const seriesDetailPoster = $("series-detail-poster");
+const seriesDetailKicker = $("series-detail-kicker");
+const seriesDetailTitle = $("series-detail-title");
+const seriesDetailMeta = $("series-detail-meta");
+const seriesDetailPlot = $("series-detail-plot");
+const seriesDetailFavBtn = /** @type {HTMLButtonElement | null} */ (
+  $("series-detail-fav")
+);
+const seriesDetailSortBtn = /** @type {HTMLButtonElement | null} */ (
+  $("series-detail-sort")
+);
 
-/** @type {{ title: string, sub?: string, load: () => Promise<Row[]> }[]} */
+/**
+ * @typedef {{
+ *   title: string,
+ *   sub?: string,
+ *   load: () => Promise<Row[]>,
+ *   seriesDetail?: {
+ *     details: object,
+ *     selectedSeasonNumber: number,
+ *     sortEpisodesAsc: boolean,
+ *   },
+ * }} StackFrame
+ */
+
+/** @type {StackFrame[]} */
 let stack = [];
+
+function getTopFrame() {
+  return stack[stack.length - 1] || null;
+}
+
+function isSeriesDetailFrame() {
+  return Boolean(getTopFrame()?.seriesDetail);
+}
+
+function isSeriesDetailGridActive() {
+  return activeNav === "vod-series" && isSeriesDetailFrame();
+}
 let focusIndex = 0;
 /** @type {'sidebar' | 'content'} */
 let focusZone = "sidebar";
@@ -163,9 +233,68 @@ let vodMenuOpen = false;
 /** @type {string} */
 let activeNav = "live";
 let liveHubCategoryId = null;
-let liveHubCategoryFocusTimer = 0;
-/** One-shot: after opening Live hub, focus first channel tile (first row of grid). */
-let liveHubFocusFirstChannelOnLoad = false;
+let vodMoviesHubCategoryId = null;
+let vodSeriesHubCategoryId = null;
+/** rAF id for coalescing hub category → grid sync (no fixed ms delay). */
+let liveHubCategoryFocusRaf = 0;
+/** One-shot: after opening Live or VOD hub, focus first tile in the grid. */
+let mediaHubFocusFirstTileOnLoad = false;
+/** One-shot: after opening series detail or switching season, focus first episode tile. */
+let seriesDetailFocusFirstEpisode = false;
+/** When leaving VOD series hub for series detail, list index to restore on Back (hub grid tile). */
+let vodSeriesHubFocusRestoreIndex = null;
+/** Keyboard focus on series detail toolbar: null = list, 0 = favorite, 1 = sort order */
+let seriesDetailToolbarIndex = null;
+/** Cancels stale short-EPG preview fetches when focus changes. */
+let liveHubPreviewEpgSeq = 0;
+/** Short EPG programme descriptions prefetched per stream (live hub). */
+const liveEpgDescriptionByStreamId = new Map();
+const HOME_NAV_STORAGE_KEY = "newtv:lastHomeNav";
+
+/**
+ * @param {{ startUnix: number, endUnix: number, description?: string }[]} listings
+ * @returns {string}
+ */
+function pickCurrentEpgDescription(listings) {
+  if (!listings?.length) return "";
+  const now = Math.floor(Date.now() / 1000);
+  let pick = listings.find((l) => l.startUnix <= now && l.endUnix > now);
+  if (!pick) pick = listings.find((l) => l.startUnix > now);
+  if (!pick) pick = listings[0];
+  return (pick?.description || "").trim();
+}
+
+/**
+ * Prefetches current/next programme descriptions for all channels in the active
+ * live hub category (runs with the same load as streams so grid focus is instant).
+ */
+async function prefetchLiveEpgDescriptionsForCurrentHubCategory() {
+  const cats = liveHubCache.getLiveHubCategories();
+  if (!cats.length) return;
+  if (!liveHubCategoryId || !cats.some((c) => c.id === liveHubCategoryId)) {
+    liveHubCategoryId = cats[0].id;
+  }
+  const streams = liveHubCache.getLiveHubStreamsForCategory(liveHubCategoryId);
+  const ids = [...new Set(streams.map((s) => s.streamId).filter(Boolean))];
+  if (!ids.length) return;
+
+  const concurrency = 8;
+  for (let i = 0; i < ids.length; i += concurrency) {
+    const chunk = ids.slice(i, i + concurrency);
+    await Promise.all(
+      chunk.map(async (id) => {
+        if (liveEpgDescriptionByStreamId.has(id)) return;
+        try {
+          const listings = await xlive.fetchShortEpg(id, 16);
+          liveEpgDescriptionByStreamId.set(id, pickCurrentEpgDescription(listings));
+        } catch (e) {
+          log.debug("prefetch EPG for preview", { id, message: e?.message });
+          liveEpgDescriptionByStreamId.set(id, "");
+        }
+      }),
+    );
+  }
+}
 let settings = settingsStore.getSettings();
 let currentPlayback = null;
 let lastPersistAtMs = 0;
@@ -194,7 +323,8 @@ function showError(el, msg) {
 }
 
 function setLoading(on) {
-  appLoading.hidden = !on;
+  if (appLoading) appLoading.hidden = !on;
+  if (mainContent) mainContent.setAttribute("aria-busy", on ? "true" : "false");
 }
 
 function showView(name) {
@@ -208,8 +338,11 @@ function setShellZone(zone) {
   shell.classList.toggle("shell--content-focused", zone === "content");
   shell.classList.toggle("shell--sidebar-focused", zone === "sidebar");
   if (zone === "sidebar") {
+    seriesDetailToolbarIndex = null;
+    seriesDetailFavBtn?.blur();
+    seriesDetailSortBtn?.blur();
     applySidebarFocus();
-    if (isLiveHubActive()) updateLiveHubPreview();
+    if (isMediaHubActive()) updateLiveHubPreview();
   } else {
     document
       .querySelectorAll(".sidebar-row--focus")
@@ -241,6 +374,13 @@ function moveSidebarFocus(delta) {
 
 function setActiveNav(nav) {
   activeNav = nav;
+  if (nav === "live" || nav === "vod-movies" || nav === "vod-series") {
+    try {
+      localStorage.setItem(HOME_NAV_STORAGE_KEY, nav);
+    } catch {
+      /* ignore storage failures */
+    }
+  }
   document.querySelectorAll("[data-nav]").forEach((el) => {
     const n = el.getAttribute("data-nav");
     let on = n === nav;
@@ -248,6 +388,30 @@ function setActiveNav(nav) {
     if (nav === "vod-series" && n === "vod") on = true;
     el.classList.toggle("sidebar-row--nav-active", on);
   });
+}
+
+function getSavedHomeNav() {
+  try {
+    const nav = localStorage.getItem(HOME_NAV_STORAGE_KEY);
+    if (nav === "vod-movies" || nav === "vod-series" || nav === "live") {
+      return nav;
+    }
+  } catch {
+    /* ignore storage failures */
+  }
+  return "live";
+}
+
+function startHomeByNav(nav) {
+  if (nav === "vod-movies") {
+    startVodMovies();
+    return;
+  }
+  if (nav === "vod-series") {
+    startSeries();
+    return;
+  }
+  startLive();
 }
 
 function syncVodSubmenu() {
@@ -327,6 +491,11 @@ function closePlayer() {
       liveHubCache.isLiveHubCacheReady()
     ) {
       void renderFrame({ skipLoading: true });
+    } else if (
+      (activeNav === "vod-movies" || activeNav === "vod-series") &&
+      stack.length === 1
+    ) {
+      void renderFrame({ skipLoading: true });
     } else {
       void renderFrame();
     }
@@ -344,7 +513,16 @@ function popFrame() {
   log.debug("popFrame()", { stackSize: stack.length });
   if (stack.length <= 1) return false;
   stack.pop();
-  focusIndex = 0;
+  if (
+    vodSeriesHubFocusRestoreIndex != null &&
+    activeNav === "vod-series" &&
+    stack.length === 1
+  ) {
+    focusIndex = vodSeriesHubFocusRestoreIndex;
+    vodSeriesHubFocusRestoreIndex = null;
+  } else {
+    focusIndex = 0;
+  }
   renderFrame();
   return true;
 }
@@ -358,6 +536,9 @@ async function renderFrame(options = {}) {
   log.debug("renderFrame()", { stackSize: stack.length, skipLoading });
   const top = stack[stack.length - 1];
   if (!top) return;
+  seriesDetailToolbarIndex = null;
+  seriesDetailFavBtn?.blur();
+  seriesDetailSortBtn?.blur();
   contentTitle.textContent = top.title;
   contentSub.textContent = top.sub || "";
   showError(appError, "");
@@ -376,21 +557,76 @@ async function renderFrame(options = {}) {
     if (!skipLoading) setLoading(false);
   }
   renderRows(rows);
+  syncMediaHubHeaderVisibility();
+  syncSeriesDetailPanel();
+  if (mainContentHeadings && isSeriesDetailFrame()) {
+    mainContentHeadings.hidden = true;
+    mainContentHeadings.setAttribute("aria-hidden", "true");
+  }
+  if (isMediaHubActive()) {
+    updateLiveHubPreview();
+    requestAnimationFrame(() => ensureLiveHubCategoryFocusVisible());
+  } else if (isSeriesDetailFrame()) {
+    requestAnimationFrame(() => ensureLiveHubCategoryFocusVisible());
+  }
+}
+
+function syncMediaHubHeaderVisibility() {
+  const on = isMediaHubActive();
+  const hero = $("live-hub-hero");
+  const vodFull =
+    on && (activeNav === "vod-movies" || activeNav === "vod-series");
+  if (mainContent) {
+    mainContent.classList.toggle("main-content--vod-fullbg", vodFull);
+  }
+  if (!vodFull && liveHubVodBg && !isSeriesDetailFrame()) {
+    liveHubVodBg.hidden = true;
+    liveHubVodBg.style.backgroundImage = "";
+  }
+  if (hero) {
+    hero.hidden = !on;
+    hero.setAttribute("aria-hidden", on ? "false" : "true");
+    hero.classList.toggle("live-hub-hero--vod", vodFull);
+  }
+  if (mainContentHeadings) {
+    mainContentHeadings.hidden = on;
+    mainContentHeadings.setAttribute("aria-hidden", on ? "true" : "false");
+  }
 }
 
 function renderRows(rows) {
   listEl.innerHTML = "";
-  const isLiveHub = activeNav === "live" && stack.length === 1;
-  if (isLiveHub && liveHubFocusFirstChannelOnLoad) {
+  const isMediaHub =
+    (activeNav === "live" && stack.length === 1) ||
+    (activeNav === "vod-movies" && stack.length === 1) ||
+    (activeNav === "vod-series" && stack.length === 1);
+  const isSeriesSplit =
+    activeNav === "vod-series" && Boolean(getTopFrame()?.seriesDetail);
+  if (isMediaHub && mediaHubFocusFirstTileOnLoad) {
     const firstCh = rows.findIndex((r) => r.kind === "live-channel");
     if (firstCh >= 0) focusIndex = firstCh;
-    liveHubFocusFirstChannelOnLoad = false;
+    mediaHubFocusFirstTileOnLoad = false;
   }
-  listEl.classList.toggle("content-list--live-hub", isLiveHub);
-  mainContent.classList.toggle("main-content--live-hub", isLiveHub);
+  if (isSeriesSplit && seriesDetailFocusFirstEpisode) {
+    const firstEp = rows.findIndex((r) => r.kind === "live-channel");
+    if (firstEp >= 0) focusIndex = firstEp;
+    seriesDetailFocusFirstEpisode = false;
+  }
+  if (rows.length > 0) {
+    if (focusIndex < 0) focusIndex = 0;
+    else if (focusIndex >= rows.length) focusIndex = rows.length - 1;
+  }
+  listEl.classList.toggle("content-list--live-hub", isMediaHub);
+  listEl.classList.toggle("content-list--series-detail", isSeriesSplit);
+  listEl.classList.toggle(
+    "content-list--vod-hub",
+    (activeNav === "vod-movies" || activeNav === "vod-series") &&
+      stack.length === 1,
+  );
+  mainContent.classList.toggle("main-content--live-hub", isMediaHub);
   let liveCatsWrap = null;
   let liveChannelsWrap = null;
-  if (isLiveHub) {
+  if (isMediaHub || isSeriesSplit) {
     liveCatsWrap = document.createElement("div");
     liveCatsWrap.className = "live-hub-categories";
     liveChannelsWrap = document.createElement("div");
@@ -404,13 +640,18 @@ function renderRows(rows) {
     if (row.vodRating) b.classList.add("content-list__item--vod-rating");
     if (row.kind) b.classList.add(`content-list__item--${row.kind}`);
     if (row.selected) b.classList.add("content-list__item--selected");
-    if (i === focusIndex && focusZone === "content")
+    if (
+      i === focusIndex &&
+      focusZone === "content" &&
+      seriesDetailToolbarIndex === null
+    )
       b.classList.add("content-list__item--focus");
     if (row.kind === "live-category" && row.categoryId) {
       b.dataset.liveCategoryId = row.categoryId;
     }
     if (row.kind === "live-channel") {
       b.dataset.liveIconUrl = row.iconUrl ? String(row.iconUrl) : "";
+      if (row.streamId) b.dataset.liveStreamId = String(row.streamId);
       const logo = document.createElement("div");
       logo.className = "content-list__item-live-logo";
       if (row.iconUrl) {
@@ -418,16 +659,35 @@ function renderRows(rows) {
       } else {
         logo.textContent = row.text.slice(0, 2).toUpperCase();
       }
+      if (isSeriesSplit && row.progress != null && row.progress > 0) {
+        const pct = Math.round(row.progress * 100);
+        const bar = document.createElement("div");
+        bar.className = "content-list__item-progress-bar";
+        bar.style.setProperty("--series-ep-pct", `${pct}%`);
+        const badge = document.createElement("span");
+        badge.className = "content-list__item-progress-badge";
+        badge.textContent = `${pct}%`;
+        logo.append(bar, badge);
+      }
 
       const textWrap = document.createElement("div");
       textWrap.className = "content-list__item-live-text";
 
       const title = document.createElement("span");
       title.className = "content-list__item-text";
+      if (isSeriesSplit && row.kind === "live-channel") {
+        title.classList.add("content-list__item-text--series-ep-num");
+      }
       title.textContent = row.text;
       textWrap.appendChild(title);
 
-      if (row.detail) {
+      if (isMediaHub && row.tmdbRatingDisplay != null) {
+        b.dataset.previewTmdb = String(row.tmdbRatingDisplay);
+      }
+
+      if (isMediaHub && row.detail) {
+        b.dataset.previewDesc = row.detail;
+      } else if (!isMediaHub && row.detail) {
         const detail = document.createElement("span");
         detail.className = "content-list__item-detail";
         detail.textContent = row.detail;
@@ -441,15 +701,22 @@ function renderRows(rows) {
         : `<span class="content-list__item-text">${escapeHtml(row.text)}</span>`;
     }
     b.addEventListener("click", () => {
+      seriesDetailToolbarIndex = null;
+      seriesDetailFavBtn?.blur();
+      seriesDetailSortBtn?.blur();
       focusIndex = i;
       focusZone = "content";
       setShellZone("content");
-      syncListFocusClasses();
       row.onSelect();
+      syncListFocusClasses();
     });
-    if (isLiveHub && row.kind === "live-category" && liveCatsWrap) {
+    if (
+      (isMediaHub || isSeriesSplit) &&
+      row.kind === "live-category" &&
+      liveCatsWrap
+    ) {
       liveCatsWrap.appendChild(b);
-    } else if (isLiveHub && liveChannelsWrap) {
+    } else if ((isMediaHub || isSeriesSplit) && liveChannelsWrap) {
       liveChannelsWrap.appendChild(b);
     } else {
       listEl.appendChild(b);
@@ -461,7 +728,6 @@ function renderRows(rows) {
     p.textContent = t("list_empty");
     listEl.appendChild(p);
   }
-  if (isLiveHub) updateLiveHubPreview();
 }
 
 /**
@@ -484,39 +750,214 @@ function getLiveHubPreviewChannelEl() {
   );
 }
 
+function getSelectedMediaHubCategoryName() {
+  const pill = document.querySelector(
+    ".live-hub-categories .content-list__item--selected .content-list__item-text",
+  );
+  return pill?.textContent?.trim() || "";
+}
+
+/**
+ * Loads short EPG for the focused live channel and fills the hero description
+ * (current or next programme).
+ * @param {string} streamId
+ * @param {string} fallbackDetail
+ * @param {number} epgSeq
+ */
+async function applyLiveEpgDescriptionToPreview(streamId, fallbackDetail, epgSeq) {
+  try {
+    const listings = await xlive.fetchShortEpg(streamId, 16);
+    if (epgSeq !== liveHubPreviewEpgSeq) return;
+    if (!isMediaHubActive() || activeNav !== "live") return;
+    const desc = pickCurrentEpgDescription(listings);
+    liveEpgDescriptionByStreamId.set(streamId, desc);
+    if (liveHubDesc) {
+      if (desc) {
+        liveHubDesc.textContent = desc;
+        liveHubDesc.hidden = false;
+      } else if (fallbackDetail) {
+        liveHubDesc.textContent = fallbackDetail;
+        liveHubDesc.hidden = false;
+      } else {
+        liveHubDesc.textContent = "";
+        liveHubDesc.hidden = true;
+      }
+    }
+  } catch (e) {
+    log.debug("applyLiveEpgDescriptionToPreview()", { message: e?.message });
+    if (epgSeq !== liveHubPreviewEpgSeq) return;
+    if (!isMediaHubActive() || activeNav !== "live") return;
+    liveEpgDescriptionByStreamId.set(streamId, "");
+    if (liveHubDesc) {
+      if (fallbackDetail) {
+        liveHubDesc.textContent = fallbackDetail;
+        liveHubDesc.hidden = false;
+      } else {
+        liveHubDesc.textContent = "";
+        liveHubDesc.hidden = true;
+      }
+    }
+  }
+}
+
 function updateLiveHubPreview() {
   if (!liveHubPreview || !liveHubPreviewImg) return;
-  if (!isLiveHubActive()) {
-    liveHubPreview.hidden = true;
+  if (!isMediaHubActive()) {
     liveHubPreview.classList.remove("live-hub-preview--has-thumb");
     liveHubPreviewImg.removeAttribute("src");
     liveHubPreviewImg.alt = "";
     liveHubPreviewImg.onload = null;
     liveHubPreviewImg.onerror = null;
+    /* Series detail: full-column backdrop is set in syncSeriesDetailPanel — keep it on focus moves */
+    if (liveHubVodBg && !isSeriesDetailFrame()) {
+      liveHubVodBg.hidden = true;
+      liveHubVodBg.style.backgroundImage = "";
+    }
     return;
   }
-  liveHubPreview.hidden = false;
-  const el = getLiveHubPreviewChannelEl();
-  const url = (el?.dataset?.liveIconUrl || "").trim();
+  liveHubPreviewEpgSeq += 1;
+  const epgSeq = liveHubPreviewEpgSeq;
+  const he = lang() === "he";
+  if (liveHubPreviewFallback) {
+    if (activeNav === "vod-movies") {
+      liveHubPreviewFallback.textContent = he ? "סרטים" : "MOVIES";
+    } else if (activeNav === "vod-series") {
+      liveHubPreviewFallback.textContent = he ? "סדרות" : "SERIES";
+    } else {
+      liveHubPreviewFallback.textContent = "LIVE";
+    }
+  }
+
+  const cat = getSelectedMediaHubCategoryName();
+  const chEl = getLiveHubPreviewChannelEl();
+  const primary =
+    chEl?.querySelector(".content-list__item-text")?.textContent?.trim() || "";
+  const detail =
+    (chEl?.dataset?.previewDesc || "").trim() ||
+    chEl?.querySelector(".content-list__item-detail")?.textContent?.trim() ||
+    "";
+
+  if (liveHubKicker) {
+    liveHubKicker.textContent =
+      cat || (he ? "קטגוריה" : "Category");
+  }
+  if (liveHubHeadline) {
+    liveHubHeadline.textContent =
+      primary || cat || contentTitle.textContent || "";
+  }
+
+  const y = String(new Date().getFullYear());
+  let metaLine = "";
+  if (activeNav === "live") {
+    metaLine = cat ? `${cat} | ${y}` : `${he ? "שידור חי" : "Live TV"} | ${y}`;
+  } else if (activeNav === "vod-movies") {
+    metaLine = cat
+      ? `${cat} | ${y}`
+      : `${he ? "סרטים" : "Movies"} | ${y}`;
+  } else if (activeNav === "vod-series") {
+    metaLine = cat
+      ? `${cat} | ${y}`
+      : `${he ? "סדרות" : "Series"} | ${y}`;
+  }
+  if (liveHubMeta) liveHubMeta.textContent = metaLine;
+
+  if (liveHubTmdb) {
+    if (activeNav === "vod-movies") {
+      const tmdb = (chEl?.dataset?.previewTmdb || "").trim();
+      if (tmdb) {
+        liveHubTmdb.textContent = `TMDB ${tmdb}`;
+        liveHubTmdb.hidden = false;
+      } else {
+        liveHubTmdb.textContent = "";
+        liveHubTmdb.hidden = true;
+      }
+    } else {
+      liveHubTmdb.textContent = "";
+      liveHubTmdb.hidden = true;
+    }
+  }
+
+  if (liveHubDesc) {
+    if (activeNav === "live") {
+      const sid = (chEl?.dataset?.liveStreamId || "").trim();
+      if (sid) {
+        const cached = liveEpgDescriptionByStreamId.get(sid);
+        if (cached !== undefined) {
+          if (cached) {
+            liveHubDesc.textContent = cached;
+            liveHubDesc.hidden = false;
+          } else if (detail) {
+            liveHubDesc.textContent = detail;
+            liveHubDesc.hidden = false;
+          } else {
+            liveHubDesc.textContent = "";
+            liveHubDesc.hidden = true;
+          }
+        } else {
+          liveHubDesc.textContent = detail || "";
+          liveHubDesc.hidden = !detail;
+          void applyLiveEpgDescriptionToPreview(sid, detail, epgSeq);
+        }
+      } else if (detail) {
+        liveHubDesc.textContent = detail;
+        liveHubDesc.hidden = false;
+      } else {
+        liveHubDesc.textContent = "";
+        liveHubDesc.hidden = true;
+      }
+    } else if (detail) {
+      liveHubDesc.textContent = detail;
+      liveHubDesc.hidden = false;
+    } else {
+      liveHubDesc.textContent = "";
+      liveHubDesc.hidden = true;
+    }
+  }
+
+  if (liveHubDuration) {
+    liveHubDuration.hidden = true;
+    liveHubDuration.textContent = "";
+  }
+
+  const url = (chEl?.dataset?.liveIconUrl || "").trim();
+  const isVodHub =
+    activeNav === "vod-movies" || activeNav === "vod-series";
   if (
-    el?.classList.contains("content-list__item--live-channel") &&
+    chEl?.classList.contains("content-list__item--live-channel") &&
     url.length
   ) {
-    liveHubPreview.classList.remove("live-hub-preview--has-thumb");
-    liveHubPreviewImg.alt =
-      el.querySelector(".content-list__item-text")?.textContent?.trim() || "";
-    liveHubPreviewImg.onload = () => {
-      liveHubPreview.classList.add("live-hub-preview--has-thumb");
-    };
-    liveHubPreviewImg.onerror = () => {
+    if (isVodHub && liveHubVodBg) {
+      liveHubVodBg.style.backgroundImage = `url("${String(url).replace(/"/g, "%22")}")`;
+      liveHubVodBg.hidden = false;
       liveHubPreview.classList.remove("live-hub-preview--has-thumb");
       liveHubPreviewImg.removeAttribute("src");
-    };
-    liveHubPreviewImg.src = url;
-    if (liveHubPreviewImg.complete && liveHubPreviewImg.naturalWidth > 0) {
-      liveHubPreview.classList.add("live-hub-preview--has-thumb");
+      liveHubPreviewImg.alt = "";
+      liveHubPreviewImg.onload = null;
+      liveHubPreviewImg.onerror = null;
+    } else {
+      if (liveHubVodBg) {
+        liveHubVodBg.hidden = true;
+        liveHubVodBg.style.backgroundImage = "";
+      }
+      liveHubPreview.classList.remove("live-hub-preview--has-thumb");
+      liveHubPreviewImg.alt = primary || "";
+      liveHubPreviewImg.onload = () => {
+        liveHubPreview.classList.add("live-hub-preview--has-thumb");
+      };
+      liveHubPreviewImg.onerror = () => {
+        liveHubPreview.classList.remove("live-hub-preview--has-thumb");
+        liveHubPreviewImg.removeAttribute("src");
+      };
+      liveHubPreviewImg.src = url;
+      if (liveHubPreviewImg.complete && liveHubPreviewImg.naturalWidth > 0) {
+        liveHubPreview.classList.add("live-hub-preview--has-thumb");
+      }
     }
   } else {
+    if (liveHubVodBg) {
+      liveHubVodBg.hidden = true;
+      liveHubVodBg.style.backgroundImage = "";
+    }
     liveHubPreview.classList.remove("live-hub-preview--has-thumb");
     liveHubPreviewImg.removeAttribute("src");
     liveHubPreviewImg.alt = "";
@@ -525,38 +966,135 @@ function updateLiveHubPreview() {
   }
 }
 
-function queueLiveHubCategorySyncFromFocus() {
-  if (!isLiveHubActive()) return;
+function queueMediaHubCategorySyncFromFocus() {
+  if (!isMediaHubActive()) return;
   const items = listEl.querySelectorAll(".content-list__item");
   const el = items[focusIndex];
   if (!el?.classList.contains("content-list__item--live-category")) return;
-  clearTimeout(liveHubCategoryFocusTimer);
-  liveHubCategoryFocusTimer = window.setTimeout(() => {
-    void applyLiveHubCategoryFromFocusIfNeeded();
-  }, 120);
+  if (liveHubCategoryFocusRaf !== 0) {
+    cancelAnimationFrame(liveHubCategoryFocusRaf);
+    liveHubCategoryFocusRaf = 0;
+  }
+  liveHubCategoryFocusRaf = requestAnimationFrame(() => {
+    liveHubCategoryFocusRaf = 0;
+    void applyMediaHubCategoryFromFocusIfNeeded();
+  });
 }
 
-async function applyLiveHubCategoryFromFocusIfNeeded() {
-  if (!isLiveHubActive()) return;
+/**
+ * Keeps the focused category pill inside the horizontal strip. TV browsers often
+ * do not scroll `.live-hub-categories` correctly with `scrollIntoView` alone.
+ */
+function ensureLiveHubCategoryFocusVisible() {
+  if (!isMediaHubActive() && !isSeriesDetailFrame()) return;
   const items = listEl.querySelectorAll(".content-list__item");
   const el = items[focusIndex];
   if (!el?.classList.contains("content-list__item--live-category")) return;
-  const cid = el.dataset.liveCategoryId;
-  if (!cid || cid === liveHubCategoryId) return;
-  liveHubCategoryId = cid;
-  await renderFrame({ skipLoading: true });
+  const strip = el.closest(".live-hub-categories");
+  if (!strip) return;
+  const padding = 16;
+  const elRect = el.getBoundingClientRect();
+  const stripRect = strip.getBoundingClientRect();
+  let delta = 0;
+  if (elRect.left < stripRect.left + padding) {
+    delta = elRect.left - stripRect.left - padding;
+  } else if (elRect.right > stripRect.right - padding) {
+    delta = elRect.right - stripRect.right + padding;
+  }
+  if (delta !== 0) strip.scrollLeft += delta;
+}
+
+async function applyMediaHubCategoryFromFocusIfNeeded() {
+  const items = listEl.querySelectorAll(".content-list__item");
+  const el = items[focusIndex];
+  if (!el?.classList.contains("content-list__item--live-category")) return;
+  const cid = (el.dataset.liveCategoryId || "").trim();
+  if (!cid) return;
+
+  if (isLiveHubActive()) {
+    if (cid === liveHubCategoryId) return;
+    liveHubCategoryId = cid;
+    await renderFrame({ skipLoading: true });
+  } else if (isVodMoviesHubActive()) {
+    if (cid === vodMoviesHubCategoryId) return;
+    vodMoviesHubCategoryId = cid;
+    await renderFrame({ skipLoading: true });
+  } else if (isVodSeriesHubActive()) {
+    if (cid === vodSeriesHubCategoryId) return;
+    vodSeriesHubCategoryId = cid;
+    await renderFrame({ skipLoading: true });
+  } else {
+    return;
+  }
+
+  /* Focus may have moved to another pill while VOD/network load ran — catch up once. */
+  const items2 = listEl.querySelectorAll(".content-list__item");
+  const el2 = items2[focusIndex];
+  if (!el2?.classList.contains("content-list__item--live-category")) return;
+  const cid2 = (el2.dataset.liveCategoryId || "").trim();
+  if (!cid2 || cid2 === cid) return;
+  if (isLiveHubActive() && cid2 !== liveHubCategoryId) {
+    void applyMediaHubCategoryFromFocusIfNeeded();
+  } else if (isVodMoviesHubActive() && cid2 !== vodMoviesHubCategoryId) {
+    void applyMediaHubCategoryFromFocusIfNeeded();
+  } else if (isVodSeriesHubActive() && cid2 !== vodSeriesHubCategoryId) {
+    void applyMediaHubCategoryFromFocusIfNeeded();
+  }
+}
+
+/**
+ * Series folder: focused season pill drives the episode list (same as selecting it).
+ */
+function syncSeriesDetailSeasonFromFocus() {
+  if (!isSeriesDetailGridActive()) return;
+  const top = getTopFrame();
+  const sd = top?.seriesDetail;
+  if (!sd) return;
+  const items = listEl.querySelectorAll(".content-list__item");
+  const el = items[focusIndex];
+  if (!el?.classList.contains("content-list__item--live-category")) return;
+  const cid = (el.dataset.liveCategoryId || "").trim();
+  if (!cid) return;
+  const n = Number(cid);
+  if (Number.isNaN(n)) return;
+  if (sd.selectedSeasonNumber === n) return;
+  sd.selectedSeasonNumber = n;
+  void renderFrame({ skipLoading: true });
 }
 
 function syncListFocusClasses() {
+  const listFocusOn =
+    focusZone === "content" && seriesDetailToolbarIndex === null;
   listEl.querySelectorAll(".content-list__item").forEach((el, i) => {
-    el.classList.toggle("content-list__item--focus", i === focusIndex);
+    el.classList.toggle(
+      "content-list__item--focus",
+      listFocusOn && i === focusIndex,
+    );
   });
-  queueLiveHubCategorySyncFromFocus();
+  queueMediaHubCategorySyncFromFocus();
   updateLiveHubPreview();
+  syncSeriesDetailSeasonFromFocus();
+  if (isMediaHubActive()) {
+    requestAnimationFrame(() => ensureLiveHubCategoryFocusVisible());
+  }
 }
 
 function isLiveHubActive() {
   return activeNav === "live" && stack.length === 1;
+}
+
+function isVodMoviesHubActive() {
+  return activeNav === "vod-movies" && stack.length === 1;
+}
+
+function isVodSeriesHubActive() {
+  return activeNav === "vod-series" && stack.length === 1;
+}
+
+function isMediaHubActive() {
+  return (
+    isLiveHubActive() || isVodMoviesHubActive() || isVodSeriesHubActive()
+  );
 }
 
 function escapeHtml(s) {
@@ -601,27 +1139,14 @@ function moveLiveHubCategoryHorizontal(delta) {
 
   const nextPos = pos + delta;
   if (nextPos < 0) return "at-first";
-  if (nextPos >= catIndices.length) {
-    if (delta > 0) {
-      const firstCh = items.findIndex((el) =>
-        el.classList.contains("content-list__item--live-channel"),
-      );
-      if (firstCh >= 0) {
-        focusIndex = firstCh;
-        syncListFocusClasses();
-        items[focusIndex]?.scrollIntoView({
-          block: "nearest",
-          inline: "nearest",
-        });
-        return "moved";
-      }
-    }
-    return "at-last";
-  }
+  if (nextPos >= catIndices.length) return "at-last";
 
   focusIndex = catIndices[nextPos];
   syncListFocusClasses();
-  items[focusIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  items[focusIndex]?.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+  });
   return "moved";
 }
 
@@ -697,6 +1222,14 @@ function moveLiveHubFocus(direction) {
       items[focusIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
       return true;
     }
+    if (direction === "up" && isSeriesDetailGridActive() && seriesDetailFavBtn) {
+      seriesDetailToolbarIndex = 0;
+      syncListFocusClasses();
+      updateLiveHubPreview();
+      requestAnimationFrame(() => ensureLiveHubCategoryFocusVisible());
+      seriesDetailFavBtn.focus();
+      return true;
+    }
     return false;
   }
 
@@ -731,12 +1264,15 @@ function moveLiveHubFocus(direction) {
 }
 
 function activateListFocus() {
-  if (isLiveHubActive()) {
+  if (isMediaHubActive()) {
     const items = listEl.querySelectorAll(".content-list__item");
     const el = items[focusIndex];
     if (el?.classList.contains("content-list__item--live-category")) {
-      clearTimeout(liveHubCategoryFocusTimer);
-      void applyLiveHubCategoryFromFocusIfNeeded();
+      if (liveHubCategoryFocusRaf !== 0) {
+        cancelAnimationFrame(liveHubCategoryFocusRaf);
+        liveHubCategoryFocusRaf = 0;
+      }
+      void applyMediaHubCategoryFromFocusIfNeeded();
     }
   }
   listEl.querySelectorAll(".content-list__item")[focusIndex]?.click();
@@ -765,7 +1301,75 @@ function buildLiveHubRows() {
       detail: s.tvArchive ? (lang() === "he" ? "ארכיון" : "Catch-up") : "",
       kind: "live-channel",
       iconUrl: s.iconUrl || "",
+      streamId: s.streamId,
       onSelect: () => openLiveChannelActions(s),
+    })),
+  );
+  return rows;
+}
+
+async function buildVodMoviesHubRows() {
+  const cats = await xvod.fetchVodCategories();
+  if (!cats.length) return [];
+  if (
+    !vodMoviesHubCategoryId ||
+    !cats.some((c) => c.id === vodMoviesHubCategoryId)
+  ) {
+    vodMoviesHubCategoryId = cats[0].id;
+  }
+  const movies = await xvod.fetchVodStreams(vodMoviesHubCategoryId);
+  /** @type {Row[]} */
+  const rows = cats.map((c) => ({
+    text: c.name,
+    kind: "live-category",
+    categoryId: c.id,
+    selected: c.id === vodMoviesHubCategoryId,
+    onSelect: () => {},
+  }));
+  rows.push(
+    ...movies.map((m) => ({
+      text: m.name,
+      detail: m.plot
+        ? m.plot.slice(0, 160) + (m.plot.length > 160 ? "…" : "")
+        : m.containerExtension || "",
+      kind: "live-channel",
+      iconUrl: m.coverUrl || "",
+      vodRating: m.tmdbRating != null,
+      tmdbRatingDisplay:
+        m.tmdbRating != null ? m.tmdbRating.toFixed(1) : undefined,
+      onSelect: () => openVodMovieActions(m),
+    })),
+  );
+  return rows;
+}
+
+async function buildSeriesHubRows() {
+  const cats = await xvod.fetchSeriesCategories();
+  if (!cats.length) return [];
+  if (
+    !vodSeriesHubCategoryId ||
+    !cats.some((c) => c.id === vodSeriesHubCategoryId)
+  ) {
+    vodSeriesHubCategoryId = cats[0].id;
+  }
+  const shows = await xvod.fetchSeries(vodSeriesHubCategoryId);
+  /** @type {Row[]} */
+  const rows = cats.map((c) => ({
+    text: c.name,
+    kind: "live-category",
+    categoryId: c.id,
+    selected: c.id === vodSeriesHubCategoryId,
+    onSelect: () => {},
+  }));
+  rows.push(
+    ...shows.map((s) => ({
+      text: s.name,
+      detail: s.plot
+        ? s.plot.slice(0, 80) + (s.plot.length > 80 ? "…" : "")
+        : "",
+      kind: "live-channel",
+      iconUrl: s.coverUrl || "",
+      onSelect: () => void openSeriesDetail(s.seriesId, s.name),
     })),
   );
   return rows;
@@ -790,7 +1394,7 @@ function startLive() {
   }
   stack = [];
   liveHubCategoryId = null;
-  liveHubFocusFirstChannelOnLoad = true;
+  mediaHubFocusFirstTileOnLoad = true;
   setActiveNav("live");
   pushFrame({
     title: lang() === "he" ? "שידור חי" : "Live Stream",
@@ -822,41 +1426,11 @@ function openLiveCategory(categoryId, name) {
 }
 
 function openLiveChannelActions(stream) {
-  const favItem = {
+  openPlayer(stream.name, urls.liveStreamUrl(stream.streamId), {
     type: "live",
     id: String(stream.streamId),
     title: stream.name,
-    streamId: String(stream.streamId),
-  };
-  pushFrame({
-    title: stream.name,
-    sub: lang() === "he" ? "פעולות" : "Actions",
-    load: async () => {
-      const isFav = favStore.isFavorite("live", String(stream.streamId));
-      return [
-        {
-          text: t("action_play"),
-          onSelect: () =>
-            openPlayer(stream.name, urls.liveStreamUrl(stream.streamId), {
-              type: "live",
-              id: String(stream.streamId),
-              title: stream.name,
-              categoryId: stream.categoryId || null,
-            }),
-        },
-        {
-          text: isFav ? t("action_remove_fav") : t("action_add_fav"),
-          onSelect: () => {
-            favStore.toggleFavorite(favItem);
-            renderFrame();
-          },
-        },
-        {
-          text: lang() === "he" ? "EPG קצר" : "Short EPG",
-          onSelect: () => openLiveShortEpg(stream),
-        },
-      ];
-    },
+    categoryId: stream.categoryId || null,
   });
 }
 
@@ -882,17 +1456,13 @@ function startVodMovies() {
     return;
   }
   stack = [];
+  vodMoviesHubCategoryId = null;
+  mediaHubFocusFirstTileOnLoad = true;
   setActiveNav("vod-movies");
   pushFrame({
     title: lang() === "he" ? "סרטים" : "Movies",
-    sub: lang() === "he" ? "קטגוריות" : "Categories",
-    load: async () => {
-      const cats = await xvod.fetchVodCategories();
-      return cats.map((c) => ({
-        text: c.name,
-        onSelect: () => openVodCategory(c.id, c.name),
-      }));
-    },
+    sub: lang() === "he" ? "בחרו קטגוריה ותוכן" : "Choose a category and title",
+    load: async () => buildVodMoviesHubRows(),
   });
 }
 
@@ -918,43 +1488,16 @@ function openVodCategory(categoryId, name) {
 }
 
 function openVodMovieActions(movie) {
-  const favItem = {
-    type: "vod",
-    id: String(movie.streamId),
-    title: movie.name,
-    streamId: String(movie.streamId),
-    ext: movie.containerExtension,
-  };
-  pushFrame({
-    title: movie.name,
-    sub: movie.plot || (lang() === "he" ? "סרט VOD" : "VOD movie"),
-    load: async () => {
-      const isFav = favStore.isFavorite("vod", String(movie.streamId));
-      return [
-        {
-          text: t("action_play"),
-          onSelect: () =>
-            openPlayer(
-              movie.name,
-              urls.vodMovieUrl(movie.streamId, movie.containerExtension),
-              {
-                type: "vod",
-                id: String(movie.streamId),
-                title: movie.name,
-                categoryId: movie.categoryId || null,
-              },
-            ),
-        },
-        {
-          text: isFav ? t("action_remove_fav") : t("action_add_fav"),
-          onSelect: () => {
-            favStore.toggleFavorite(favItem);
-            renderFrame();
-          },
-        },
-      ];
+  openPlayer(
+    movie.name,
+    urls.vodMovieUrl(movie.streamId, movie.containerExtension),
+    {
+      type: "vod",
+      id: String(movie.streamId),
+      title: movie.name,
+      categoryId: movie.categoryId || null,
     },
-  });
+  );
 }
 
 function startSeries() {
@@ -964,17 +1507,14 @@ function startSeries() {
     return;
   }
   stack = [];
+  vodSeriesHubCategoryId = null;
+  vodSeriesHubFocusRestoreIndex = null;
+  mediaHubFocusFirstTileOnLoad = true;
   setActiveNav("vod-series");
   pushFrame({
     title: lang() === "he" ? "סדרות" : "Series",
-    sub: lang() === "he" ? "קטגוריות" : "Categories",
-    load: async () => {
-      const cats = await xvod.fetchSeriesCategories();
-      return cats.map((c) => ({
-        text: c.name,
-        onSelect: () => openSeriesCategory(c.id, c.name),
-      }));
-    },
+    sub: lang() === "he" ? "בחרו קטגוריה ותוכן" : "Choose a category and title",
+    load: async () => buildSeriesHubRows(),
   });
 }
 
@@ -989,39 +1529,167 @@ function openSeriesCategory(categoryId, name) {
         detail: s.plot
           ? s.plot.slice(0, 80) + (s.plot.length > 80 ? "…" : "")
           : "",
-        onSelect: () => openSeriesShowActions(s),
+        onSelect: () => void openSeriesDetail(s.seriesId, s.name),
       }));
     },
   });
 }
 
-function openSeriesShowActions(show) {
-  const favItem = {
-    type: "series",
-    id: String(show.seriesId),
-    title: show.name,
-    seriesId: String(show.seriesId),
-  };
-  pushFrame({
-    title: show.name,
-    sub: show.plot || (lang() === "he" ? "סדרה" : "Series"),
-    load: async () => {
-      const isFav = favStore.isFavorite("series", String(show.seriesId));
-      return [
-        {
-          text: lang() === "he" ? "פתח עונות/פרקים" : "Open seasons / episodes",
-          onSelect: () => openSeriesDetail(show.seriesId, show.name),
-        },
-        {
-          text: isFav ? t("action_remove_fav") : t("action_add_fav"),
-          onSelect: () => {
-            favStore.toggleFavorite(favItem);
-            renderFrame();
-          },
-        },
-      ];
-    },
-  });
+/**
+ * @param {{ details: object, selectedSeasonNumber: number, sortEpisodesAsc: boolean }} sd
+ * @returns {Row[]}
+ */
+function buildSeriesDetailRows(sd) {
+  const details = /** @type {{ name?: string, seriesId?: string, seasons: { seasonNumber: number, title: string }[], episodesBySeason: Map<number, { episodeId: string, episodeNumber: number, title: string, plot?: string | null, coverUrl?: string | null, containerExtension: string, seasonNumber: number }[]>, coverUrl?: string | null }} */ (
+    sd.details
+  );
+  let { selectedSeasonNumber, sortEpisodesAsc } = sd;
+  const he = lang() === "he";
+  const lwList = lastWatchStore.listLastWatch();
+  /** @type {Row[]} */
+  const rows = [];
+  const seasonsWithEpisodes = details.seasons
+    .filter(
+      (se) =>
+        (details.episodesBySeason.get(se.seasonNumber) || []).length > 0,
+    )
+    .slice()
+    .sort((a, b) => a.seasonNumber - b.seasonNumber);
+  if (
+    seasonsWithEpisodes.length &&
+    !seasonsWithEpisodes.some((s) => s.seasonNumber === selectedSeasonNumber)
+  ) {
+    selectedSeasonNumber = seasonsWithEpisodes[0].seasonNumber;
+    sd.selectedSeasonNumber = selectedSeasonNumber;
+  }
+  for (const se of seasonsWithEpisodes) {
+    rows.push({
+      text: se.title,
+      kind: "live-category",
+      categoryId: String(se.seasonNumber),
+      selected: se.seasonNumber === selectedSeasonNumber,
+      onSelect: () => {
+        const top = getTopFrame();
+        if (top?.seriesDetail) {
+          top.seriesDetail.selectedSeasonNumber = se.seasonNumber;
+          seriesDetailFocusFirstEpisode = true;
+          void renderFrame({ skipLoading: true });
+        }
+      },
+    });
+  }
+  let eps = details.episodesBySeason.get(selectedSeasonNumber) || [];
+  eps = eps.slice().sort((a, b) =>
+    sortEpisodesAsc
+      ? a.episodeNumber - b.episodeNumber
+      : b.episodeNumber - a.episodeNumber,
+  );
+  for (const ep of eps) {
+    const lwEp = lwList.find(
+      (x) => x.type === "series-episode" && x.id === String(ep.episodeId),
+    );
+    let progress = 0;
+    if (
+      lwEp &&
+      lwEp.durationSec > 0 &&
+      lwEp.positionSec > 0
+    ) {
+      progress = Math.min(1, lwEp.positionSec / lwEp.durationSec);
+    }
+    const epLabel = he ? `פרק ${ep.episodeNumber}` : `Episode ${ep.episodeNumber}`;
+    rows.push({
+      text: epLabel,
+      detail: ep.title,
+      kind: "live-channel",
+      iconUrl: ep.coverUrl || details.coverUrl || "",
+      progress: progress > 0.02 ? progress : undefined,
+      onSelect: () => openSeriesEpisodeActions(details, ep),
+    });
+  }
+  return rows;
+}
+
+function syncSeriesDetailPanel() {
+  const top = getTopFrame();
+  const sd = top?.seriesDetail;
+  if (!seriesDetailPanel) return;
+  if (!sd?.details) {
+    seriesDetailToolbarIndex = null;
+    seriesDetailFavBtn?.blur();
+    seriesDetailSortBtn?.blur();
+    seriesDetailPanel.hidden = true;
+    if (seriesDetailBg) {
+      seriesDetailBg.style.backgroundImage = "";
+    }
+    if (seriesDetailPoster) {
+      seriesDetailPoster.style.backgroundImage = "";
+    }
+    mainContent?.classList.remove("main-content--series-detail");
+    mainContent?.classList.remove("main-content--series-detail-fullbg");
+    const vodHubRoot =
+      (activeNav === "vod-movies" || activeNav === "vod-series") &&
+      stack.length === 1;
+    /* VOD hub root repaints backdrop in updateLiveHubPreview(); avoid wiping it here */
+    if (liveHubVodBg && !vodHubRoot) {
+      liveHubVodBg.hidden = true;
+      liveHubVodBg.style.backgroundImage = "";
+    }
+    return;
+  }
+  const details = /** @type {{ name?: string, seriesId?: string, plot?: string | null, genre?: string | null, coverUrl?: string | null }} */ (
+    sd.details
+  );
+  seriesDetailPanel.hidden = false;
+  mainContent?.classList.add("main-content--series-detail");
+  mainContent?.classList.add("main-content--series-detail-fullbg");
+  const cover = (details.coverUrl || "").trim();
+  const esc = cover ? String(cover).replace(/"/g, "%22") : "";
+  /* Same full-column dimmed poster layer as VOD hub */
+  if (esc && liveHubVodBg) {
+    liveHubVodBg.style.backgroundImage = `url("${esc}")`;
+    liveHubVodBg.hidden = false;
+  } else if (liveHubVodBg) {
+    liveHubVodBg.hidden = true;
+    liveHubVodBg.style.backgroundImage = "";
+  }
+  if (seriesDetailBg) {
+    seriesDetailBg.style.backgroundImage = "";
+  }
+  if (esc && seriesDetailPoster) {
+    seriesDetailPoster.style.backgroundImage = `url("${esc}")`;
+  } else if (seriesDetailPoster) {
+    seriesDetailPoster.style.backgroundImage = "";
+  }
+  if (seriesDetailKicker) seriesDetailKicker.textContent = t("series_label");
+  if (seriesDetailTitle) seriesDetailTitle.textContent = details.name || "";
+  if (seriesDetailMeta) {
+    const g = (details.genre || "").trim();
+    seriesDetailMeta.textContent = g;
+    seriesDetailMeta.hidden = !g;
+  }
+  if (seriesDetailPlot) {
+    const p = (details.plot || "").trim();
+    seriesDetailPlot.textContent = p;
+    seriesDetailPlot.hidden = !p;
+  }
+  if (seriesDetailSortBtn) {
+    seriesDetailSortBtn.setAttribute("aria-label", t("series_sort_aria"));
+    seriesDetailSortBtn.title = t("series_sort_aria");
+  }
+  if (seriesDetailFavBtn) {
+    seriesDetailFavBtn.setAttribute("aria-label", t("series_fav_aria"));
+    seriesDetailFavBtn.title = t("series_fav_aria");
+  }
+  updateSeriesDetailFavButton();
+}
+
+function updateSeriesDetailFavButton() {
+  const top = getTopFrame();
+  const id = /** @type {{ seriesId?: string }} */ (top?.seriesDetail?.details)
+    ?.seriesId;
+  if (!seriesDetailFavBtn || !id) return;
+  const isFav = favStore.isFavorite("series", String(id));
+  seriesDetailFavBtn.classList.toggle("series-detail-panel__icon-btn--active", isFav);
 }
 
 async function openSeriesDetail(seriesId, name) {
@@ -1036,25 +1704,39 @@ async function openSeriesDetail(seriesId, name) {
     return;
   }
   setLoading(false);
+  const seasons = details.seasons
+    .filter(
+      (se) =>
+        (details.episodesBySeason.get(se.seasonNumber) || []).length > 0,
+    )
+    .slice()
+    .sort((a, b) => a.seasonNumber - b.seasonNumber);
+  const firstSeason = seasons[0]?.seasonNumber ?? 0;
+  if (isVodSeriesHubActive()) {
+    const items = listEl.querySelectorAll(".content-list__item");
+    const fel = items[focusIndex];
+    if (fel?.classList.contains("content-list__item--live-channel")) {
+      vodSeriesHubFocusRestoreIndex = focusIndex;
+    } else {
+      vodSeriesHubFocusRestoreIndex = null;
+    }
+  } else {
+    vodSeriesHubFocusRestoreIndex = null;
+  }
+  seriesDetailFocusFirstEpisode = true;
   pushFrame({
     title: details.name || name,
     sub: lang() === "he" ? "פרקים" : "Episodes",
+    seriesDetail: {
+      details,
+      selectedSeasonNumber: firstSeason,
+      sortEpisodesAsc: true,
+    },
     load: async () => {
-      const rows = [];
-      const seasons = details.seasons
-        .slice()
-        .sort((a, b) => a.seasonNumber - b.seasonNumber);
-      for (const se of seasons) {
-        const eps = details.episodesBySeason.get(se.seasonNumber) || [];
-        for (const ep of eps) {
-          rows.push({
-            text: `${se.title} · E${ep.episodeNumber} — ${ep.title}`,
-            detail: ep.plot ? ep.plot.slice(0, 60) + "…" : "",
-            onSelect: () => openSeriesEpisodeActions(details, ep),
-          });
-        }
-      }
-      return rows;
+      const top = getTopFrame();
+      const sd = top?.seriesDetail;
+      if (!sd) return [];
+      return buildSeriesDetailRows(sd);
     },
   });
 }
@@ -1204,7 +1886,7 @@ async function runSearchFlow(initialQuery) {
       .map((x) => ({
         text: `[SERIES] ${x.name}`,
         detail: x.plot ? x.plot.slice(0, 80) : "",
-        onSelect: () => openSeriesShowActions(x),
+        onSelect: () => void openSeriesDetail(x.seriesId, x.name),
       }));
     const resultRows = [
       {
@@ -1465,6 +2147,7 @@ function startProfile() {
         onSelect: () => {
           cred.clearSession();
           liveHubCache.clearLiveHubCache();
+          liveEpgDescriptionByStreamId.clear();
           stack = [];
           vodMenuOpen = false;
           syncVodSubmenu();
@@ -1561,11 +2244,20 @@ function updateClock() {
   }
 }
 
+function applyDocumentTextDirection() {
+  document.documentElement.setAttribute("dir", "ltr");
+  document.documentElement.setAttribute(
+    "lang",
+    lang() === "he" ? "he" : "en",
+  );
+}
+
 function applySidebarI18n() {
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     const k = node.getAttribute("data-i18n");
     if (k) node.textContent = t(k);
   });
+  applyDocumentTextDirection();
 }
 
 function injectSidebarIcons() {
@@ -1587,6 +2279,7 @@ function applyLoginI18n() {
   $("login-reset").textContent = t("login_reset");
   const d = new Date().toLocaleDateString("en-GB", { timeZone: "Asia/Jerusalem" });
   $("login-build").textContent = `Build: ${d}, web 0.2.1`;
+  applyDocumentTextDirection();
 }
 
 function bindLogin() {
@@ -1638,7 +2331,7 @@ function bindLogin() {
       showView("app");
       vodMenuOpen = false;
       syncVodSubmenu();
-      startLive();
+      startHomeByNav(getSavedHomeNav());
       setShellZone("content");
       focusIndex = 0;
       sidebarFocusIndex = getSidebarFocusables().findIndex(
@@ -1717,9 +2410,84 @@ function bindKeys() {
     const items = listEl.querySelectorAll(".content-list__item");
     const n = items.length;
 
+    if (isSeriesDetailFrame() && seriesDetailToolbarIndex !== null) {
+      if (ev.key === "ArrowDown") {
+        ev.preventDefault();
+        seriesDetailToolbarIndex = null;
+        seriesDetailFavBtn?.blur();
+        seriesDetailSortBtn?.blur();
+        const all = listEl.querySelectorAll(".content-list__item");
+        let catIdx = Array.from(all).findIndex(
+          (el) =>
+            el.classList.contains("content-list__item--live-category") &&
+            el.classList.contains("content-list__item--selected"),
+        );
+        if (catIdx < 0) {
+          catIdx = Array.from(all).findIndex((el) =>
+            el.classList.contains("content-list__item--live-category"),
+          );
+        }
+        if (catIdx >= 0) focusIndex = catIdx;
+        syncListFocusClasses();
+        all[focusIndex]?.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+        });
+        return;
+      }
+      if (ev.key === "ArrowLeft") {
+        ev.preventDefault();
+        if (seriesDetailToolbarIndex === 1 && seriesDetailFavBtn) {
+          seriesDetailToolbarIndex = 0;
+          seriesDetailFavBtn.focus();
+        } else {
+          seriesDetailToolbarIndex = null;
+          seriesDetailFavBtn?.blur();
+          seriesDetailSortBtn?.blur();
+          setShellZone("sidebar");
+          applySidebarFocus();
+        }
+        return;
+      }
+      if (ev.key === "ArrowRight") {
+        ev.preventDefault();
+        if (seriesDetailToolbarIndex === 0 && seriesDetailSortBtn) {
+          seriesDetailToolbarIndex = 1;
+          seriesDetailSortBtn.focus();
+        }
+        return;
+      }
+      if (ev.key === "ArrowUp") {
+        ev.preventDefault();
+        return;
+      }
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        (seriesDetailToolbarIndex === 0
+          ? seriesDetailFavBtn
+          : seriesDetailSortBtn
+        )?.click();
+        return;
+      }
+      if (KEY_BACK.has(ev.keyCode)) {
+        ev.preventDefault();
+        seriesDetailToolbarIndex = null;
+        seriesDetailFavBtn?.blur();
+        seriesDetailSortBtn?.blur();
+        if (!popFrame()) {
+          setShellZone("sidebar");
+          applySidebarFocus();
+        } else {
+          syncListFocusClasses();
+        }
+        return;
+      }
+      return;
+    }
+
     if (ev.key === "ArrowDown") {
       ev.preventDefault();
-      if (isLiveHubActive()) {
+      if (isMediaHubActive() || isSeriesDetailGridActive()) {
         moveLiveHubFocus("down");
       } else {
         moveListFocus(1);
@@ -1728,7 +2496,7 @@ function bindKeys() {
     }
     if (ev.key === "ArrowUp") {
       ev.preventDefault();
-      if (isLiveHubActive()) {
+      if (isMediaHubActive() || isSeriesDetailGridActive()) {
         moveLiveHubFocus("up");
       } else {
         moveListFocus(-1);
@@ -1737,7 +2505,7 @@ function bindKeys() {
     }
     if (ev.key === "ArrowLeft") {
       ev.preventDefault();
-      if (isLiveHubActive()) {
+      if (isMediaHubActive() || isSeriesDetailGridActive()) {
         const moved = moveLiveHubFocus("left");
         if (!moved) {
           setShellZone("sidebar");
@@ -1750,7 +2518,7 @@ function bindKeys() {
       return;
     }
     if (ev.key === "ArrowRight") {
-      if (isLiveHubActive()) {
+      if (isMediaHubActive() || isSeriesDetailGridActive()) {
         ev.preventDefault();
         moveLiveHubFocus("right");
       }
@@ -1773,6 +2541,39 @@ function bindKeys() {
   });
 }
 
+function bindSeriesDetailPanel() {
+  const favIcon = document.querySelector("[data-series-fav-icon]");
+  const sortIcon = document.querySelector("[data-series-sort-icon]");
+  if (favIcon && ICONS.heart) favIcon.innerHTML = ICONS.heart;
+  if (sortIcon) sortIcon.innerHTML = SERIES_SORT_ICON;
+  seriesDetailFavBtn?.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const det = /** @type {{ seriesId?: string, name?: string }} */ (
+      getTopFrame()?.seriesDetail?.details
+    );
+    const id = det?.seriesId;
+    if (!id) return;
+    favStore.toggleFavorite({
+      type: "series",
+      id: String(id),
+      title: String(det.name || id),
+      seriesId: String(id),
+    });
+    updateSeriesDetailFavButton();
+  });
+  seriesDetailSortBtn?.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const top = getTopFrame();
+    if (top?.seriesDetail) {
+      top.seriesDetail.sortEpisodesAsc = !top.seriesDetail.sortEpisodesAsc;
+      seriesDetailFocusFirstEpisode = true;
+      void renderFrame({ skipLoading: true });
+    }
+  });
+}
+
 function boot() {
   log.debug("boot()");
   if (SKIP_SIGNIN) {
@@ -1787,6 +2588,7 @@ function boot() {
   bindLogin();
   bindSidebarPointer();
   bindKeys();
+  bindSeriesDetailPanel();
   videoEl.addEventListener("timeupdate", maybePersistPlaybackTick);
   videoEl.addEventListener("pause", attachPlaybackPersistence);
   videoEl.addEventListener("ended", attachPlaybackPersistence);
@@ -1796,7 +2598,7 @@ function boot() {
   syncVodSubmenu();
 
   if (cred.isLoggedIn()) {
-    startLive();
+    startHomeByNav(getSavedHomeNav());
     setShellZone(settings.sidebarCollapsedByDefault ? "content" : "sidebar");
     focusIndex = 0;
     sidebarFocusIndex = getSidebarFocusables().findIndex(

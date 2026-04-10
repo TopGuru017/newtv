@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
@@ -53,16 +53,78 @@
     <div id="view-app" class="view view--app">
         <div id="shell" class="shell shell--sidebar-focused">
             <main id="main-content" class="main-content" aria-label="Content">
+                <div id="live-hub-vod-bg" class="main-content__vod-bg" hidden aria-hidden="true"></div>
                 <header class="main-content__header">
-                    <h2 id="content-title" class="main-content__title"></h2>
-                    <p id="content-sub" class="main-content__sub"></p>
-                    <div id="live-hub-preview" class="live-hub-preview" hidden aria-hidden="true">
-                        <span class="live-hub-preview__fallback">LIVE</span>
-                        <img id="live-hub-preview-img" class="live-hub-preview__img" alt="" decoding="async" />
+                    <div id="live-hub-hero" class="live-hub-hero" hidden>
+                        <div class="live-hub-hero__text">
+                            <p id="live-hub-kicker" class="live-hub-hero__kicker"></p>
+                            <h2 id="live-hub-headline" class="live-hub-hero__headline"></h2>
+                            <p id="live-hub-tmdb" class="live-hub-hero__tmdb" hidden></p>
+                            <p id="live-hub-meta" class="live-hub-hero__meta"></p>
+                            <p id="live-hub-desc" class="live-hub-hero__desc"></p>
+                            <p id="live-hub-duration" class="live-hub-hero__duration" hidden></p>
+                        </div>
+                        <div class="live-hub-hero__thumbwrap">
+                            <div class="live-hub-hero__thumbgrad" aria-hidden="true"></div>
+                            <div id="live-hub-preview" class="live-hub-preview">
+                                <span id="live-hub-preview-fallback" class="live-hub-preview__fallback">LIVE</span>
+                                <img id="live-hub-preview-img" class="live-hub-preview__img" alt="" decoding="async" />
+                            </div>
+                        </div>
+                    </div>
+                    <div id="main-content-headings" class="main-content-headings">
+                        <h2 id="content-title" class="main-content__title"></h2>
+                        <p id="content-sub" class="main-content__sub"></p>
                     </div>
                 </header>
+                <div id="series-detail-panel" class="series-detail-panel" hidden>
+                    <div id="series-detail-bg" class="series-detail-panel__bg" aria-hidden="true"></div>
+                    <div class="series-detail-panel__inner">
+                        <div class="series-detail-panel__row">
+                            <div
+                                id="series-detail-poster"
+                                class="series-detail-panel__poster"
+                                role="img"
+                                aria-hidden="true"
+                            ></div>
+                            <div class="series-detail-panel__copy">
+                                <div class="series-detail-panel__toolbar">
+                                    <button
+                                        type="button"
+                                        id="series-detail-fav"
+                                        class="series-detail-panel__icon-btn"
+                                        aria-label="Favorite"
+                                    >
+                                        <span class="series-detail-panel__icon" data-series-fav-icon></span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        id="series-detail-sort"
+                                        class="series-detail-panel__icon-btn"
+                                        aria-label="Sort episodes"
+                                    >
+                                        <span class="series-detail-panel__icon" data-series-sort-icon></span>
+                                    </button>
+                                </div>
+                                <p id="series-detail-kicker" class="series-detail-panel__kicker"></p>
+                                <h2 id="series-detail-title" class="series-detail-panel__title"></h2>
+                                <p id="series-detail-meta" class="series-detail-panel__meta"></p>
+                                <p id="series-detail-plot" class="series-detail-panel__plot"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <p id="app-error" class="banner banner--error" hidden></p>
-                <p id="app-loading" class="banner banner--loading" hidden>Loading…</p>
+                <div
+                    id="app-loading"
+                    class="app-loading-overlay"
+                    hidden
+                    role="status"
+                    aria-live="polite"
+                    aria-label="Loading"
+                >
+                    <div class="app-loading-overlay__spinner" aria-hidden="true"></div>
+                </div>
                 <div id="list" class="content-list" role="listbox"></div>
             </main>
 

@@ -6,6 +6,24 @@ import { xtreamGet } from "./xapi.js";
 import { createLogger } from "../debug/logger.js";
 
 const log = createLogger("iptv/xvod");
+let vodCategoriesCache = null;
+let seriesCategoriesCache = null;
+/** @type {Map<string, any[]>} */
+const vodStreamsByCategoryCache = new Map();
+/** @type {Map<string, any[]>} */
+const seriesByCategoryCache = new Map();
+/** @type {Map<string, any>} */
+const seriesDetailsCache = new Map();
+/** @type {Map<string, Promise<any>>} */
+const inFlight = new Map();
+
+function withInFlightCache(key, fetcher) {
+  const running = inFlight.get(key);
+  if (running) return running;
+  const p = (async () => fetcher())().finally(() => inFlight.delete(key));
+  inFlight.set(key, p);
+  return p;
+}
 
 function readAddedUnixSeconds(o, preferKeys) {
   for (const k of preferKeys) {
@@ -35,6 +53,8 @@ function readTmdbRating(o) {
 }
 
 export async function fetchVodCategories() {
+  if (vodCategoriesCache) return vodCategoriesCache;
+  return withInFlightCache("vod_categories", async () => {
   log.debug("fetchVodCategories()");
   const json = await xtreamGet("get_vod_categories");
   const arr = parseJsonArrayOrData(json);
@@ -47,13 +67,19 @@ export async function fetchVodCategories() {
     out.push({ id, name });
   }
   log.debug("fetchVodCategories() done", { count: out.length });
-  return out;
+    vodCategoriesCache = out;
+    return out;
+  });
 }
 
 export async function fetchVodStreams(categoryId) {
+  const cid = String(categoryId);
+  const cached = vodStreamsByCategoryCache.get(cid);
+  if (cached) return cached;
+  return withInFlightCache(`vod_streams:${cid}`, async () => {
   log.debug("fetchVodStreams()", { categoryId });
   const json = await xtreamGet("get_vod_streams", {
-    category_id: String(categoryId),
+      category_id: cid,
   });
   const arr = parseJsonArrayOrData(json);
   const out = [];
@@ -84,10 +110,14 @@ export async function fetchVodStreams(categoryId) {
     });
   }
   log.debug("fetchVodStreams() done", { categoryId, count: out.length });
-  return out;
+    vodStreamsByCategoryCache.set(cid, out);
+    return out;
+  });
 }
 
 export async function fetchSeriesCategories() {
+  if (seriesCategoriesCache) return seriesCategoriesCache;
+  return withInFlightCache("series_categories", async () => {
   log.debug("fetchSeriesCategories()");
   const json = await xtreamGet("get_series_categories");
   const arr = parseJsonArrayOrData(json);
@@ -100,13 +130,19 @@ export async function fetchSeriesCategories() {
     out.push({ id, name });
   }
   log.debug("fetchSeriesCategories() done", { count: out.length });
-  return out;
+    seriesCategoriesCache = out;
+    return out;
+  });
 }
 
 export async function fetchSeries(categoryId) {
+  const cid = String(categoryId);
+  const cached = seriesByCategoryCache.get(cid);
+  if (cached) return cached;
+  return withInFlightCache(`series:${cid}`, async () => {
   log.debug("fetchSeries()", { categoryId });
   const json = await xtreamGet("get_series", {
-    category_id: String(categoryId),
+      category_id: cid,
   });
   const arr = parseJsonArrayOrData(json);
   const out = [];
@@ -135,7 +171,9 @@ export async function fetchSeries(categoryId) {
     });
   }
   log.debug("fetchSeries() done", { categoryId, count: out.length });
-  return out;
+    seriesByCategoryCache.set(cid, out);
+    return out;
+  });
 }
 
 export async function fetchAllVodStreamsForSearch() {
@@ -252,10 +290,38 @@ function readSeriesPlotFromInfo(info, root) {
   return candidates.reduce((a, b) => (a.length >= b.length ? a : b));
 }
 
+/**
+ * Mutates cached series details: remove empty episode buckets and resync `seasons`.
+ * @param {{ seasons?: { seasonNumber: number, title: string }[], episodesBySeason?: Map<number, unknown[]> }} d
+ */
+function pruneSeriesDetailsEmptySeasons(d) {
+  if (!d?.episodesBySeason || typeof d.episodesBySeason.entries !== "function")
+    return;
+  const m = d.episodesBySeason;
+  for (const [seasonNum, bucket] of [...m.entries()]) {
+    if (!bucket || !bucket.length) m.delete(seasonNum);
+  }
+  const nums = [...m.keys()].sort((a, b) => a - b);
+  const titleBy = new Map(
+    (d.seasons || []).map((s) => [s.seasonNumber, s.title]),
+  );
+  d.seasons = nums.map((num) => ({
+    seasonNumber: num,
+    title: titleBy.get(num) || `Season ${num}`,
+  }));
+}
+
 export async function fetchSeriesDetails(seriesId) {
+  const sid = String(seriesId);
+  const cached = seriesDetailsCache.get(sid);
+  if (cached) {
+    pruneSeriesDetailsEmptySeasons(cached);
+    return cached;
+  }
+  return withInFlightCache(`series_details:${sid}`, async () => {
   log.debug("fetchSeriesDetails()", { seriesId });
   const json = await xtreamGet("get_series_info", {
-    series_id: String(seriesId),
+      series_id: sid,
   });
   const t = json.trim();
   if (!t.startsWith("{")) throw new Error("Invalid series info");
@@ -263,6 +329,10 @@ export async function fetchSeriesDetails(seriesId) {
   const info = root.info || {};
   const seriesName = String(info.name || "").trim() || String(seriesId);
   const seriesPlot = readSeriesPlotFromInfo(info, root);
+  const seriesGenre =
+    String(info.genre || "").trim() ||
+    String(info.category_name || "").trim() ||
+    null;
   const seriesCover =
     String(info.cover || "").trim() ||
     String(info.cover_big || "").trim() ||
@@ -323,11 +393,11 @@ export async function fetchSeriesDetails(seriesId) {
     }
   }
 
-  const seasonNumbers = new Set([
-    ...seasonTitles.keys(),
-    ...episodesBySeason.keys(),
-  ]);
-  const seasons = [...seasonNumbers]
+  for (const [seasonNum, bucket] of [...episodesBySeason.entries()]) {
+    if (!bucket || bucket.length === 0) episodesBySeason.delete(seasonNum);
+  }
+
+  const seasons = [...episodesBySeason.keys()]
     .sort((a, b) => a - b)
     .map((num) => ({
       seasonNumber: num,
@@ -335,9 +405,10 @@ export async function fetchSeriesDetails(seriesId) {
     }));
 
   const out = {
-    seriesId: String(seriesId),
+    seriesId: sid,
     name: seriesName,
     plot: seriesPlot,
+    genre: seriesGenre,
     coverUrl: seriesCover,
     seasons,
     episodesBySeason,
@@ -347,5 +418,7 @@ export async function fetchSeriesDetails(seriesId) {
     seasons: out.seasons.length,
     episodeBuckets: out.episodesBySeason.size,
   });
-  return out;
+    seriesDetailsCache.set(sid, out);
+    return out;
+  });
 }
